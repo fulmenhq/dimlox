@@ -1,0 +1,17 @@
+# yamlfmt configuration for dimtm
+# This file configures yamlfmt to match dimtm's YAML formatting preferences
+
+formatter:
+  type: basic
+  indent: 2
+  line_ending: lf
+  # eof_newline: false - goneat's finalizer handles EOF normalization (single trailing newline)
+  # so we don't need yamlfmt to add one (which would cause instability with multiline scalars)
+  # retain_line_breaks_single: false - causes #magic___^_^___line markers in output, yamlfmt bug
+
+# Exclude patterns
+exclude:
+  - vendor/**
+  - .git/**
+  - dist/**
+  - bin/**

@@ -1,0 +1,49 @@
+# Build outputs
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/dimlox
+
+# Test outputs
+*.test
+*.out
+coverage.out
+
+# Planning (ephemeral, local only)
+.plans/
+AGENTS.local.md
+
+# Dependencies
+vendor/
+go.work
+go.work.sum
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Scratch
+.tmp/
+.scratch/
+tmp/
+temp/
+
+# Logs
+*.log
+logs/
+
+# Local build config overrides
+buildconfig.mk

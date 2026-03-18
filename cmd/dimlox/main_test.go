@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"testing"
 )
@@ -70,5 +71,54 @@ func TestLandingFlagDefaultsFromEnv(t *testing.T) {
 	}
 	if flag.DefValue != landing {
 		t.Fatalf("landing default = %q, want %q", flag.DefValue, landing)
+	}
+}
+
+func TestGCPProjectDefaultsFromEnv(t *testing.T) {
+	const project = "dimlox-test-project"
+
+	oldCloud, hadCloud := os.LookupEnv("GCLOUD_PROJECT")
+	oldGoogle, hadGoogle := os.LookupEnv("GOOGLE_CLOUD_PROJECT")
+	_ = os.Unsetenv("GOOGLE_CLOUD_PROJECT")
+	if err := os.Setenv("GCLOUD_PROJECT", project); err != nil {
+		t.Fatalf("Setenv GCLOUD_PROJECT: %v", err)
+	}
+	t.Cleanup(func() {
+		if hadCloud {
+			_ = os.Setenv("GCLOUD_PROJECT", oldCloud)
+		} else {
+			_ = os.Unsetenv("GCLOUD_PROJECT")
+		}
+		if hadGoogle {
+			_ = os.Setenv("GOOGLE_CLOUD_PROJECT", oldGoogle)
+		} else {
+			_ = os.Unsetenv("GOOGLE_CLOUD_PROJECT")
+		}
+	})
+
+	cmd := rootCmd()
+	flag := cmd.PersistentFlags().Lookup("gcp-project")
+	if flag == nil {
+		t.Fatal("gcp-project flag not found")
+	}
+	if flag.DefValue != project {
+		t.Fatalf("gcp-project default = %q, want %q", flag.DefValue, project)
+	}
+}
+
+func TestDoctorBadURIExitCode(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"doctor", "s3://bucket/key"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want exit error")
+	}
+	var ee *exitError
+	if !errors.As(err, &ee) {
+		t.Fatalf("Execute() error = %T, want *exitError", err)
+	}
+	if ee.code != exitBadURI {
+		t.Fatalf("exit code = %d, want %d", ee.code, exitBadURI)
 	}
 }

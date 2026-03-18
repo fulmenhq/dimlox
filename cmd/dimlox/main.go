@@ -45,7 +45,7 @@ func main() {
 	root := rootCmd()
 	root.SetContext(appctx.WithLogger(ctx, log))
 	if err := root.Execute(); err != nil {
-		os.Exit(foundry.ExitFailure)
+		exitWithError(err)
 	}
 }
 
@@ -59,11 +59,12 @@ func rootCmd() *cobra.Command {
 
 	root := &cobra.Command{
 		Use:   "dimlox",
-		Short: "Data in motion — large-file transfer, inspection, and splitting across clouds",
+		Short: "Data in motion - large-file transfer, inspection, and splitting across clouds",
 		Long: `dimlox moves, inspects, and splits large files across Azure Blob Storage,
 Google Cloud Storage, and local filesystems without loading them into memory.`,
-		SilenceUsage: true,
-		Version:      formatVersion(),
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		Version:       formatVersion(),
 
 		// PersistentPreRunE runs before every subcommand. It applies --log-level
 		// when provided, and falls back to a default logger when none is in the
@@ -87,8 +88,8 @@ Google Cloud Storage, and local filesystems without loading them into memory.`,
 	root.SetVersionTemplate("{{.Name}} {{.Version}}\n")
 
 	root.PersistentFlags().StringVar(&azProfile, "az-profile", "",
-		"Azure CLI profile name (sets AZURE_CONFIG_DIR to ~/.azure/profiles/<name>)")
-	root.PersistentFlags().StringVar(&gcpProject, "gcp-project", "",
+		"Azure CLI profile name (sets AZURE_CONFIG_DIR via AZURE_PROFILES_DIR or ~/.azure-profiles/<name>)")
+	root.PersistentFlags().StringVar(&gcpProject, "gcp-project", defaultGCPProject(),
 		"GCP project ID for requester-pays buckets (also: GCLOUD_PROJECT env)")
 	root.PersistentFlags().StringVar(&landingDir, "landing", os.Getenv("DIMLOX_LANDING_DIR"),
 		"landing area for large files (also: DIMLOX_LANDING_DIR env)")
@@ -96,10 +97,10 @@ Google Cloud Storage, and local filesystems without loading them into memory.`,
 		"log verbosity: trace, debug, info, warn, error (default: info)")
 
 	root.AddCommand(versionCmd())
+	root.AddCommand(doctorCmd())
+	root.AddCommand(lsCmd())
 
 	// Phase 1 commands registered here as they are implemented:
-	// root.AddCommand(doctorCmd())
-	// root.AddCommand(lsCmd())
 	// Phase 2:
 	// root.AddCommand(getCmd())
 	// root.AddCommand(putCmd())
@@ -124,4 +125,11 @@ func versionCmd() *cobra.Command {
 
 func formatVersion() string {
 	return fmt.Sprintf("%s (commit %s, built %s)", version, gitCommit, buildTime)
+}
+
+func defaultGCPProject() string {
+	if project := os.Getenv("GCLOUD_PROJECT"); project != "" {
+		return project
+	}
+	return os.Getenv("GOOGLE_CLOUD_PROJECT")
 }

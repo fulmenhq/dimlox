@@ -70,19 +70,28 @@ make assess
 make install        # copies binary to ~/.local/bin/dimlox
 ```
 
+Default install location:
+
+- Linux / macOS: `~/.local/bin/dimlox`
+- Windows: `%APPDATA%/dimlox/bin/dimlox.exe`
+
 ## Authentication
 
 **Azure Blob Storage** — uses `DefaultAzureCredential`. Activate the right CLI profile first:
 
 ```bash
-az-profile e3-filemage   # or whatever alias sets AZURE_CONFIG_DIR
+az-profile client-a   # or whatever alias sets AZURE_CONFIG_DIR
 ```
+
+Setup guide: `docs/setup/azure-cli.md`
 
 **Google Cloud Storage** — uses Application Default Credentials:
 
 ```bash
 gcloud auth application-default login
 ```
+
+Setup guide: `docs/setup/gcloud-storage.md`
 
 ## Version
 

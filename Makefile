@@ -25,7 +25,11 @@ EXT := .exe
 endif
 
 INSTALL_PREFIX  ?= $(HOME)
+ifeq ($(GOOS),windows)
+INSTALL_BINDIR  ?= $(if $(APPDATA),$(APPDATA)/dimlox/bin,$(INSTALL_PREFIX)/AppData/Roaming/dimlox/bin)
+else
 INSTALL_BINDIR  ?= $(INSTALL_PREFIX)/.local/bin
+endif
 INSTALL_TARGET  ?= $(INSTALL_BINDIR)/$(NAME)$(EXT)
 BUILD_ARTIFACT  := bin/$(NAME)_$(GOOS)_$(GOARCH)$(EXT)
 

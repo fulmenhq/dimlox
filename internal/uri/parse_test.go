@@ -30,11 +30,11 @@ func TestParse(t *testing.T) {
 	}{
 		{
 			name:           "azure https object",
-			input:          "https://prodfilemagesa.blob.core.windows.net/filemagefs01/a/b.gz",
+			input:          "https://exampleaccount.blob.core.windows.net/examplecontainer/a/b.gz",
 			wantProvider:   ProviderAZBlob,
-			wantNormalized: "azblob://prodfilemagesa/filemagefs01/a/b.gz",
-			wantAZAccount:  "prodfilemagesa",
-			wantContainer:  "filemagefs01",
+			wantNormalized: "azblob://exampleaccount/examplecontainer/a/b.gz",
+			wantAZAccount:  "exampleaccount",
+			wantContainer:  "examplecontainer",
 			wantBlobPath:   "a/b.gz",
 		},
 		{

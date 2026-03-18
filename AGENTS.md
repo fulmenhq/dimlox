@@ -214,6 +214,10 @@ Committer-of-Record: @3leapsdave
 - Push to `main` directly
 - Skip quality gates
 - Commit secrets, credentials, or access keys
+- Use real client names, proprietary project names, or identifiable account names
+  in code, tests, docs, or examples — use generic placeholders like `client-a`,
+  `exampleaccount`, `example-project` instead. This is an OSS repo; client-specific
+  identifiers must never appear in committed history.
 - Load a whole file into memory in `inspect` or `split` commands
 - Use `bufio.Scanner` without raising its buffer limit for large-line files
 - Add dependencies without checking they are necessary
@@ -221,6 +225,7 @@ Committer-of-Record: @3leapsdave
 - **EVER commit anything from `.plans/`** — gitignored, ephemeral only
 - Commit `AGENTS.local.md` (gitignored)
 - Hardcode account names, container names, or bucket names in non-test code
+  (test code must also use generic placeholders, not real client identifiers)
 - Use `git add -f` / `--force` — if a file is gitignored, fix `.gitignore` or the ignore rule; never bypass it. `git add -f` is reserved for genuine emergencies with explicit human authorisation only.
 
 ---

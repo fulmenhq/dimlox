@@ -102,10 +102,10 @@ Google Cloud Storage, and local filesystems without loading them into memory.`,
 	root.AddCommand(getCmd())
 	root.AddCommand(putCmd())
 	root.AddCommand(cpCmd())
+	root.AddCommand(inspectCmd())
 
 	// Phase 2:
 	// Phase 3:
-	// root.AddCommand(inspectCmd())
 	// Phase 4:
 	// root.AddCommand(splitCmd())
 

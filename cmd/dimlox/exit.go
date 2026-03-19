@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	exitSuccess     = 0
-	exitOperational = 1
-	exitBadURI      = 2
+	exitSuccess          = 0
+	exitOperational      = 1
+	exitBadURI           = 2
+	exitChecksumMismatch = 3
 )
 
 type exitError struct {

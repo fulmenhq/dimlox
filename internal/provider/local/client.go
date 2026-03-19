@@ -140,12 +140,41 @@ func (p *Provider) OpenReader(_ context.Context, rawURI string, offset, length i
 	return f, nil
 }
 
-func (p *Provider) DownloadFile(context.Context, string, *os.File, provider.DownloadOptions) error {
-	return provider.ErrNotImplemented
+func (p *Provider) DownloadFile(_ context.Context, rawURI string, dst *os.File, opts provider.DownloadOptions) error {
+	parsed, err := uri.Parse(rawURI)
+	if err != nil {
+		return err
+	}
+	src, err := os.Open(parsed.LocalPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	if err := provider.ResetFile(dst, -1); err != nil {
+		return err
+	}
+	_, err = io.Copy(dst, provider.NewProgressReader(src, opts.Progress))
+	return err
 }
 
-func (p *Provider) UploadFile(context.Context, *os.File, string, provider.UploadOptions) error {
-	return provider.ErrNotImplemented
+func (p *Provider) UploadFile(_ context.Context, src *os.File, rawURI string, opts provider.UploadOptions) error {
+	parsed, err := uri.Parse(rawURI)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(parsed.LocalPath), 0o755); err != nil {
+		return err
+	}
+	dst, err := os.Create(parsed.LocalPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	_, err = io.Copy(dst, provider.NewProgressReader(src, opts.Progress))
+	return err
 }
 
 func objectMetaForPath(path, name string, info os.FileInfo) *provider.ObjectMeta {

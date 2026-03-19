@@ -99,12 +99,11 @@ Google Cloud Storage, and local filesystems without loading them into memory.`,
 	root.AddCommand(versionCmd())
 	root.AddCommand(doctorCmd())
 	root.AddCommand(lsCmd())
+	root.AddCommand(getCmd())
+	root.AddCommand(putCmd())
+	root.AddCommand(cpCmd())
 
-	// Phase 1 commands registered here as they are implemented:
 	// Phase 2:
-	// root.AddCommand(getCmd())
-	// root.AddCommand(putCmd())
-	// root.AddCommand(cpCmd())
 	// Phase 3:
 	// root.AddCommand(inspectCmd())
 	// Phase 4:
@@ -132,4 +131,11 @@ func defaultGCPProject() string {
 		return project
 	}
 	return os.Getenv("GOOGLE_CLOUD_PROJECT")
+}
+
+func mbToBytes(mb int64) int64 {
+	if mb <= 0 {
+		return 0
+	}
+	return mb * 1024 * 1024
 }

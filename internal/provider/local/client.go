@@ -8,6 +8,7 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/fulmenhq/dimlox/internal/provider"
@@ -140,12 +141,73 @@ func (p *Provider) OpenReader(_ context.Context, rawURI string, offset, length i
 	return f, nil
 }
 
-func (p *Provider) DownloadFile(context.Context, string, *os.File, provider.DownloadOptions) error {
-	return provider.ErrNotImplemented
+func (p *Provider) DownloadFile(_ context.Context, rawURI string, dst *os.File, opts provider.DownloadOptions) error {
+	parsed, err := uri.Parse(rawURI)
+	if err != nil {
+		return err
+	}
+	src, err := os.Open(parsed.LocalPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	if err := resetFile(dst); err != nil {
+		return err
+	}
+	_, err = copyWithProgress(dst, src, opts.Progress)
+	return err
 }
 
-func (p *Provider) UploadFile(context.Context, *os.File, string, provider.UploadOptions) error {
-	return provider.ErrNotImplemented
+func (p *Provider) UploadFile(_ context.Context, src *os.File, rawURI string, opts provider.UploadOptions) error {
+	parsed, err := uri.Parse(rawURI)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(parsed.LocalPath), 0o755); err != nil {
+		return err
+	}
+	dst, err := os.Create(parsed.LocalPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	_, err = copyWithProgress(dst, src, opts.Progress)
+	return err
+}
+
+func copyWithProgress(dst io.Writer, src io.Reader, progress func(int64)) (int64, error) {
+	if progress == nil {
+		return io.Copy(dst, src)
+	}
+	var transferred atomic.Int64
+	reader := &progressReader{reader: src, onRead: func(n int) {
+		progress(transferred.Add(int64(n)))
+	}}
+	return io.Copy(dst, reader)
+}
+
+type progressReader struct {
+	reader io.Reader
+	onRead func(int)
+}
+
+func (r *progressReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if n > 0 && r.onRead != nil {
+		r.onRead(n)
+	}
+	return n, err
+}
+
+func resetFile(f *os.File) error {
+	if err := f.Truncate(0); err != nil {
+		return err
+	}
+	_, err := f.Seek(0, io.SeekStart)
+	return err
 }
 
 func objectMetaForPath(path, name string, info os.FileInfo) *provider.ObjectMeta {

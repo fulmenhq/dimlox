@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"mime"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -117,16 +119,81 @@ func (p *Provider) List(ctx context.Context, rawURI string, opts provider.ListOp
 	}
 }
 
-func (p *Provider) OpenReader(context.Context, string, int64, int64) (io.ReadCloser, error) {
-	return nil, provider.ErrNotImplemented
+func (p *Provider) OpenReader(ctx context.Context, rawURI string, offset, length int64) (io.ReadCloser, error) {
+	parsed, err := uri.Parse(rawURI)
+	if err != nil {
+		return nil, err
+	}
+	client, err := p.clientForAccount(parsed.AZAccount)
+	if err != nil {
+		return nil, err
+	}
+	stream, err := client.ServiceClient().NewContainerClient(parsed.AZContainer).NewBlobClient(parsed.AZBlobPath).DownloadStream(ctx, &blob.DownloadStreamOptions{
+		Range: blob.HTTPRange{Offset: offset, Count: maxRangeCount(length)},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return stream.NewRetryReader(ctx, nil), nil
 }
 
-func (p *Provider) DownloadFile(context.Context, string, *os.File, provider.DownloadOptions) error {
-	return provider.ErrNotImplemented
+func (p *Provider) DownloadFile(ctx context.Context, rawURI string, dst *os.File, opts provider.DownloadOptions) error {
+	parsed, err := uri.Parse(rawURI)
+	if err != nil {
+		return err
+	}
+	client, err := p.clientForAccount(parsed.AZAccount)
+	if err != nil {
+		return err
+	}
+	if err := resetFile(dst); err != nil {
+		return err
+	}
+	downloadOpts := &azsdk.DownloadFileOptions{}
+	if opts.BlockSize > 0 {
+		downloadOpts.BlockSize = opts.BlockSize
+	}
+	if opts.Concurrency > 0 {
+		downloadOpts.Concurrency = uint16(opts.Concurrency)
+	}
+	if opts.Progress != nil {
+		downloadOpts.Progress = opts.Progress
+	}
+	_, err = client.DownloadFile(ctx, parsed.AZContainer, parsed.AZBlobPath, dst, downloadOpts)
+	return err
 }
 
-func (p *Provider) UploadFile(context.Context, *os.File, string, provider.UploadOptions) error {
-	return provider.ErrNotImplemented
+func (p *Provider) UploadFile(ctx context.Context, src *os.File, rawURI string, opts provider.UploadOptions) error {
+	parsed, err := uri.Parse(rawURI)
+	if err != nil {
+		return err
+	}
+	client, err := p.clientForAccount(parsed.AZAccount)
+	if err != nil {
+		return err
+	}
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	uploadOpts := &azsdk.UploadFileOptions{}
+	if opts.BlockSize > 0 {
+		uploadOpts.BlockSize = opts.BlockSize
+	}
+	if opts.Concurrency > 0 {
+		uploadOpts.Concurrency = uint16(opts.Concurrency)
+	}
+	if opts.Progress != nil {
+		uploadOpts.Progress = opts.Progress
+	}
+	contentType := opts.ContentType
+	if contentType == "" {
+		contentType = mime.TypeByExtension(filepath.Ext(parsed.AZBlobPath))
+	}
+	if contentType != "" {
+		uploadOpts.HTTPHeaders = &blob.HTTPHeaders{BlobContentType: &contentType}
+	}
+	_, err = client.UploadFile(ctx, parsed.AZContainer, parsed.AZBlobPath, src, uploadOpts)
+	return err
 }
 
 func (p *Provider) clientForAccount(account string) (*azsdk.Client, error) {
@@ -228,4 +295,19 @@ func maxResults(limit int) *int32 {
 	}
 	v := int32(limit)
 	return &v
+}
+
+func maxRangeCount(length int64) int64 {
+	if length <= 0 {
+		return 0
+	}
+	return length
+}
+
+func resetFile(f *os.File) error {
+	if err := f.Truncate(0); err != nil {
+		return err
+	}
+	_, err := f.Seek(0, io.SeekStart)
+	return err
 }

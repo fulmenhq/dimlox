@@ -8,7 +8,6 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 	"time"
 
 	"github.com/fulmenhq/dimlox/internal/provider"
@@ -151,10 +150,10 @@ func (p *Provider) DownloadFile(_ context.Context, rawURI string, dst *os.File, 
 		return err
 	}
 	defer src.Close()
-	if err := resetFile(dst); err != nil {
+	if err := provider.ResetFile(dst, -1); err != nil {
 		return err
 	}
-	_, err = copyWithProgress(dst, src, opts.Progress)
+	_, err = io.Copy(dst, provider.NewProgressReader(src, opts.Progress))
 	return err
 }
 
@@ -174,39 +173,7 @@ func (p *Provider) UploadFile(_ context.Context, src *os.File, rawURI string, op
 	if _, err := src.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-	_, err = copyWithProgress(dst, src, opts.Progress)
-	return err
-}
-
-func copyWithProgress(dst io.Writer, src io.Reader, progress func(int64)) (int64, error) {
-	if progress == nil {
-		return io.Copy(dst, src)
-	}
-	var transferred atomic.Int64
-	reader := &progressReader{reader: src, onRead: func(n int) {
-		progress(transferred.Add(int64(n)))
-	}}
-	return io.Copy(dst, reader)
-}
-
-type progressReader struct {
-	reader io.Reader
-	onRead func(int)
-}
-
-func (r *progressReader) Read(p []byte) (int, error) {
-	n, err := r.reader.Read(p)
-	if n > 0 && r.onRead != nil {
-		r.onRead(n)
-	}
-	return n, err
-}
-
-func resetFile(f *os.File) error {
-	if err := f.Truncate(0); err != nil {
-		return err
-	}
-	_, err := f.Seek(0, io.SeekStart)
+	_, err = io.Copy(dst, provider.NewProgressReader(src, opts.Progress))
 	return err
 }
 

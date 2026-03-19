@@ -146,7 +146,7 @@ func (p *Provider) DownloadFile(ctx context.Context, rawURI string, dst *os.File
 	if err != nil {
 		return err
 	}
-	if err := resetFile(dst); err != nil {
+	if err := provider.ResetFile(dst, -1); err != nil {
 		return err
 	}
 	downloadOpts := &azsdk.DownloadFileOptions{}
@@ -302,12 +302,4 @@ func maxRangeCount(length int64) int64 {
 		return 0
 	}
 	return length
-}
-
-func resetFile(f *os.File) error {
-	if err := f.Truncate(0); err != nil {
-		return err
-	}
-	_, err := f.Seek(0, io.SeekStart)
-	return err
 }

@@ -81,6 +81,9 @@ func (p *Provider) List(ctx context.Context, rawURI string, opts provider.ListOp
 	}
 }
 
+// OpenReader returns the raw stored bytes from GCS. `ReadCompressed(true)` is
+// intentional for transfer paths so gzip-encoded objects are downloaded exactly
+// as stored. Phase 3 inspect/wc callers must handle decompression above this layer.
 func (p *Provider) OpenReader(ctx context.Context, rawURI string, offset, length int64) (io.ReadCloser, error) {
 	parsed, err := uri.Parse(rawURI)
 	if err != nil {
@@ -102,7 +105,7 @@ func (p *Provider) DownloadFile(ctx context.Context, rawURI string, dst *os.File
 	if err != nil {
 		return err
 	}
-	if err := resetFile(dst, attrs.Size); err != nil {
+	if err := provider.ResetFile(dst, attrs.Size); err != nil {
 		return err
 	}
 	blockSize := opts.BlockSize
@@ -113,9 +116,9 @@ func (p *Provider) DownloadFile(ctx context.Context, rawURI string, dst *os.File
 	if concurrency <= 0 {
 		concurrency = 8
 	}
-	var total atomic.Int64
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(concurrency)
+	var total atomic.Int64
 	for offset := int64(0); offset < attrs.Size; offset += blockSize {
 		offset := offset
 		length := minInt64(blockSize, attrs.Size-offset)
@@ -126,13 +129,11 @@ func (p *Provider) DownloadFile(ctx context.Context, rawURI string, dst *os.File
 			}
 			defer reader.Close()
 			writer := io.NewOffsetWriter(dst, offset)
-			if opts.Progress == nil {
-				_, err = io.Copy(writer, reader)
-				return err
-			}
-			_, err = io.Copy(writer, &progressReader{reader: reader, onRead: func(n int) {
-				opts.Progress(total.Add(int64(n)))
-			}})
+			_, err = io.Copy(writer, provider.NewCountingReader(reader, func(n int) {
+				if opts.Progress != nil {
+					opts.Progress(total.Add(int64(n)))
+				}
+			}))
 			return err
 		})
 	}
@@ -239,25 +240,4 @@ func minInt64(a, b int64) int64 {
 		return a
 	}
 	return b
-}
-
-type progressReader struct {
-	reader io.Reader
-	onRead func(int)
-}
-
-func (r *progressReader) Read(p []byte) (int, error) {
-	n, err := r.reader.Read(p)
-	if n > 0 && r.onRead != nil {
-		r.onRead(n)
-	}
-	return n, err
-}
-
-func resetFile(f *os.File, size int64) error {
-	if err := f.Truncate(size); err != nil {
-		return err
-	}
-	_, err := f.Seek(0, io.SeekStart)
-	return err
 }

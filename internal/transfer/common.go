@@ -236,7 +236,7 @@ func streamCompressed(ctx context.Context, src provider.StorageProvider, rawURI 
 	if _, err := dst.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-	if err := dst.Truncate(0); err != nil {
+	if err := provider.ResetFile(dst, -1); err != nil {
 		return err
 	}
 	gz := gzip.NewWriter(dst)
@@ -250,11 +250,7 @@ func streamCompressed(ctx context.Context, src provider.StorageProvider, rawURI 
 		}
 	}
 	if progress != nil {
-		var transferred int64
-		stream = &countingReader{reader: stream, onRead: func(n int) {
-			transferred += int64(n)
-			progress(transferred)
-		}}
+		stream = provider.NewProgressReader(stream, progress)
 	}
 	if _, err := io.Copy(gz, stream); err != nil {
 		return err
@@ -269,20 +265,6 @@ func streamCompressed(ctx context.Context, src provider.StorageProvider, rawURI 
 	}
 	return nil
 }
-
-type countingReader struct {
-	reader io.Reader
-	onRead func(int)
-}
-
-func (r *countingReader) Read(p []byte) (int, error) {
-	n, err := r.reader.Read(p)
-	if n > 0 && r.onRead != nil {
-		r.onRead(n)
-	}
-	return n, err
-}
-
 func detectContentType(path string) string {
 	if ct := mime.TypeByExtension(filepath.Ext(path)); ct != "" {
 		return ct

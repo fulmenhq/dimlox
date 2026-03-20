@@ -15,13 +15,14 @@ func inspectCmd() *cobra.Command {
 		midN        int
 		tailN       int
 		detectFlag  bool
+		forceStream bool
 		sampleBytes int64
 		format      string
 	)
 	cmd := &cobra.Command{
 		Use:   "inspect <uri>",
 		Short: "Stream metadata, counts, and samples from large files",
-		Long:  "Inspect streams large files without full-file loads. On .gz sources, --mid and --tail fall back to a forward stream because gzip does not support efficient backward seeking.",
+		Long:  "Inspect streams large files without full-file loads. On compressed cloud sources, --tail and --mid are refused by default because gzip fallback requires re-streaming the file over the network; use --force-stream to override.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			azProfile, _ := cmd.Flags().GetString("az-profile")
@@ -43,20 +44,33 @@ func inspectCmd() *cobra.Command {
 				}
 				return printSample(cmd, res, format)
 			case midN > 0:
+				if !forceStream {
+					if err := inspect.RefuseCompressedCloudSample(cmd.Context(), args[0], inspect.SampleMid, midN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject}); err != nil {
+						return withExitCode(exitOperational, "%v", err)
+					}
+				}
 				res, err := inspect.Mid(cmd.Context(), args[0], midN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
 				if err != nil {
 					return withExitCode(exitOperational, "%v", err)
 				}
 				return printSample(cmd, res, format)
 			case tailN > 0:
+				if !forceStream {
+					if err := inspect.RefuseCompressedCloudSample(cmd.Context(), args[0], inspect.SampleTail, tailN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject}); err != nil {
+						return withExitCode(exitOperational, "%v", err)
+					}
+				}
 				res, err := inspect.Tail(cmd.Context(), args[0], tailN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
 				if err != nil {
 					return withExitCode(exitOperational, "%v", err)
 				}
 				return printSample(cmd, res, format)
 			case detectFlag:
-				_ = sampleBytes
-				return withExitCode(exitOperational, "%v", inspect.UnsupportedInspectError("--detect"))
+				res, err := inspect.Detect(cmd.Context(), args[0], sampleBytes, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
+				if err != nil {
+					return withExitCode(exitOperational, "%v", err)
+				}
+				return printDetect(cmd, res, format)
 			default:
 				return withExitCode(exitOperational, "inspect requires one of --wc, --head, --mid, --tail, or --detect")
 			}
@@ -64,9 +78,10 @@ func inspectCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&wcFlag, "wc", false, "stream line counts and report compressed byte size")
 	cmd.Flags().IntVar(&headN, "head", 0, "print the first N lines")
-	cmd.Flags().IntVar(&midN, "mid", 0, "print N lines near the midpoint")
-	cmd.Flags().IntVar(&tailN, "tail", 0, "print the last N lines")
-	cmd.Flags().BoolVar(&detectFlag, "detect", false, "detect encoding and delimiter (follow-up slice)")
+	cmd.Flags().IntVar(&midN, "mid", 0, "print N lines near the midpoint (compressed cloud sources require --force-stream)")
+	cmd.Flags().IntVar(&tailN, "tail", 0, "print the last N lines (compressed cloud sources require --force-stream)")
+	cmd.Flags().BoolVar(&detectFlag, "detect", false, "detect encoding and delimiter from a bounded sample")
+	cmd.Flags().BoolVar(&forceStream, "force-stream", false, "allow expensive forward-stream fallback on compressed cloud tail/mid operations")
 	cmd.Flags().Int64Var(&sampleBytes, "sample-bytes", 65536, "bytes to sample for detection")
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
 	return cmd
@@ -94,5 +109,22 @@ func printSample(cmd *cobra.Command, res *inspect.SampleResult, format string) e
 	for _, line := range res.Lines {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
 	}
+	return nil
+}
+
+func printDetect(cmd *cobra.Command, res *inspect.DetectResult, format string) error {
+	if format == "json" {
+		return json.NewEncoder(cmd.OutOrStdout()).Encode(res)
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "uri: %s\n", res.URI)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "compressed: %t\n", res.Compressed)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "encoding: %s\n", res.Encoding)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "bom: %t\n", res.BOM)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "line-ending: %s\n", res.LineEnding)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "delimiter: %s\n", res.Delimiter)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "delimiter-confidence: %.3f\n", res.DelimiterConfidence)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "fields-per-row: %d\n", res.FieldsPerRow)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "sample-rows: %d\n", res.SampleRows)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "sample-bytes: %d\n", res.SampleBytes)
 	return nil
 }

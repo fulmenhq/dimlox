@@ -84,6 +84,29 @@ func basename(rawURI string, parsed *uri.ParsedURI) string {
 	}
 }
 
+func RefuseCompressedCloudSample(ctx context.Context, rawURI string, mode SampleMode, count int, opts ProviderOptions) error {
+	src, parsed, err := providerForURI(ctx, rawURI, opts)
+	if err != nil {
+		return err
+	}
+	meta, err := src.Stat(ctx, rawURI)
+	if err != nil {
+		return err
+	}
+	if !isCompressedCloud(rawURI, parsed, meta) {
+		return nil
+	}
+	localPath := filepath.Join("/tmp", basename(rawURI, parsed))
+	return fmt.Errorf("--%s on a compressed cloud source requires decompressing the entire file over the network. This is typically slower than downloading the file first.\n\nRecommended workflow:\n\n  dimlox get %s %s\n  dimlox inspect --%s %d %s\n\nIf local disk space allows, downloading first is faster and lets you run multiple inspect operations without re-streaming.\n\nTo stream anyway: add --force-stream", mode, rawURI, localPath, mode, count, localPath)
+}
+
+func isCompressedCloud(rawURI string, parsed *uri.ParsedURI, meta *provider.ObjectMeta) bool {
+	if parsed == nil || parsed.Provider == uri.ProviderLocal {
+		return false
+	}
+	return isCompressed(rawURI, meta)
+}
+
 func UnsupportedInspectError(name string) error {
 	return fmt.Errorf("inspect %s is not implemented yet in this Phase 3 slice", name)
 }

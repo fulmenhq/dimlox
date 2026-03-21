@@ -197,6 +197,10 @@ func TestRangeSplitCloudWithHeaderAndManifest(t *testing.T) {
 	if len(fake.requests) < 3 {
 		t.Fatalf("range requests = %d, want multiple", len(fake.requests))
 	}
+	wantHeaderLen := minInt64(rangeHeaderReadSize, fake.meta.Size)
+	if fake.requests[0].offset != 0 || fake.requests[0].length != wantHeaderLen {
+		t.Fatalf("header request = %+v, want bounded header read of %d bytes", fake.requests[0], wantHeaderLen)
+	}
 	manifestData, err := os.ReadFile(res.ManifestPath)
 	if err != nil {
 		t.Fatalf("ReadFile manifest: %v", err)
@@ -254,6 +258,65 @@ func TestRangeSplitKeepsFinalLineWithoutTrailingNewline(t *testing.T) {
 	}
 }
 
+func TestRangeSplitLongHeaderBeyondProbeSize(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	parsed, err := uri.Parse("gs://bucket/test.psv")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	header := "c1|" + strings.Repeat("x", int(rangeHeaderReadSize)+32) + "\n"
+	data := []byte(header + "1|2\n3|4\n")
+	fake := &stubSplitProvider{
+		meta: &provider.ObjectMeta{Name: "test.psv", Size: int64(len(data)), ContentType: "text/plain"},
+		data: data,
+	}
+	oldResolver := providerResolver
+	oldBlockSize := rangeReadBlockSize
+	providerResolver = func(context.Context, string, ProviderOptions) (provider.StorageProvider, *uri.ParsedURI, error) {
+		return fake, parsed, nil
+	}
+	rangeReadBlockSize = 8
+	defer func() {
+		providerResolver = oldResolver
+		rangeReadBlockSize = oldBlockSize
+	}()
+
+	res, err := Split(context.Background(), "gs://bucket/test.psv", Options{Mode: ModeRange, Rows: 1, Header: true, OutDir: outDir, Delimiter: "|", Encoding: "UTF-8"})
+	if err != nil {
+		t.Fatalf("Split() error = %v", err)
+	}
+	if len(res.Shards) != 2 {
+		t.Fatalf("len(Shards) = %d, want 2", len(res.Shards))
+	}
+	first, err := os.ReadFile(filepath.Join(outDir, "test_shard_0001.psv"))
+	if err != nil {
+		t.Fatalf("ReadFile shard1: %v", err)
+	}
+	second, err := os.ReadFile(filepath.Join(outDir, "test_shard_0002.psv"))
+	if err != nil {
+		t.Fatalf("ReadFile shard2: %v", err)
+	}
+	if string(first) != header+"1|2\n" {
+		t.Fatalf("shard1 = %q", string(first))
+	}
+	if string(second) != header+"3|4\n" {
+		t.Fatalf("shard2 = %q", string(second))
+	}
+	if len(fake.requests) < 2 {
+		t.Fatalf("header requests = %d, want multiple bounded reads", len(fake.requests))
+	}
+	if fake.requests[0].offset != 0 || fake.requests[0].length != rangeHeaderReadSize {
+		t.Fatalf("first header request = %+v, want bounded initial probe", fake.requests[0])
+	}
+	wantFollowupLen := minInt64(rangeHeaderReadSize, fake.meta.Size-rangeHeaderReadSize)
+	if fake.requests[1].offset != rangeHeaderReadSize || fake.requests[1].length != wantFollowupLen {
+		t.Fatalf("second header request = %+v, want bounded follow-up probe of %d bytes", fake.requests[1], wantFollowupLen)
+	}
+}
+
 func TestSplitAutoUsesRangeForCloudText(t *testing.T) {
 	outDir := filepath.Join(t.TempDir(), "out")
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -306,17 +369,67 @@ func TestRangeSplitRejectsLocalSource(t *testing.T) {
 	}
 }
 
+func TestBinarySplitUsesFixedReadBuffer(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	parsed, err := uri.Parse("gs://bucket/sample.bin")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	tracker := &trackingReadCloser{Reader: bytes.NewReader([]byte("abcdefghij"))}
+	fake := &stubSplitProvider{
+		meta: &provider.ObjectMeta{Name: "sample.bin", Size: 10, ContentType: "application/octet-stream"},
+		readerFactory: func(int64, int64) (io.ReadCloser, error) {
+			tracker.Reader.Seek(0, io.SeekStart)
+			tracker.maxReadLen = 0
+			return tracker, nil
+		},
+	}
+	oldResolver := providerResolver
+	oldBufferSize := binaryCopyBufferSize
+	providerResolver = func(context.Context, string, ProviderOptions) (provider.StorageProvider, *uri.ParsedURI, error) {
+		return fake, parsed, nil
+	}
+	binaryCopyBufferSize = 3
+	defer func() {
+		providerResolver = oldResolver
+		binaryCopyBufferSize = oldBufferSize
+	}()
+
+	res, err := Split(context.Background(), "gs://bucket/sample.bin", Options{Mode: ModeBinary, Bytes: 8, OutDir: outDir, Manifest: true})
+	if err != nil {
+		t.Fatalf("Split() error = %v", err)
+	}
+	if len(res.Shards) != 2 {
+		t.Fatalf("len(Shards) = %d, want 2", len(res.Shards))
+	}
+	if tracker.maxReadLen > int(binaryCopyBufferSize) {
+		t.Fatalf("maxReadLen = %d, want <= %d", tracker.maxReadLen, binaryCopyBufferSize)
+	}
+	if res.Shards[0].ShardBytes != 8 || res.Shards[1].ShardBytes != 2 {
+		t.Fatalf("shard bytes = %d, %d", res.Shards[0].ShardBytes, res.Shards[1].ShardBytes)
+	}
+	if matches, err := filepath.Glob(filepath.Join(outDir, "*.part")); err != nil {
+		t.Fatalf("Glob: %v", err)
+	} else if len(matches) != 0 {
+		t.Fatalf("part files = %v, want none", matches)
+	}
+}
+
 type openRequest struct {
 	offset int64
 	length int64
 }
 
 type stubSplitProvider struct {
-	meta      *provider.ObjectMeta
-	data      []byte
-	statCalls int
-	openCalls int
-	requests  []openRequest
+	meta          *provider.ObjectMeta
+	data          []byte
+	readerFactory func(int64, int64) (io.ReadCloser, error)
+	statCalls     int
+	openCalls     int
+	requests      []openRequest
 }
 
 func (s *stubSplitProvider) Name() string { return "stub" }
@@ -347,8 +460,25 @@ func (s *stubSplitProvider) openReader(offset, length int64) (io.ReadCloser, err
 	if length >= 0 && offset+length < end {
 		end = offset + length
 	}
+	if s.readerFactory != nil {
+		return s.readerFactory(offset, length)
+	}
 	return io.NopCloser(bytes.NewReader(s.data[offset:end])), nil
 }
+
+type trackingReadCloser struct {
+	*bytes.Reader
+	maxReadLen int
+}
+
+func (t *trackingReadCloser) Read(p []byte) (int, error) {
+	if len(p) > t.maxReadLen {
+		t.maxReadLen = len(p)
+	}
+	return t.Reader.Read(p)
+}
+
+func (t *trackingReadCloser) Close() error { return nil }
 
 func (s *stubSplitProvider) DownloadFile(context.Context, string, *os.File, provider.DownloadOptions) error {
 	return nil

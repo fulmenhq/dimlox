@@ -49,6 +49,13 @@ func (s *shardWriter) WriteRow(line []byte) error {
 	return nil
 }
 
+func (s *shardWriter) Write(p []byte) (int, error) {
+	if s.gz != nil {
+		return s.gz.Write(p)
+	}
+	return s.writer.Write(p)
+}
+
 func (s *shardWriter) write(line []byte) error {
 	if s.gz != nil {
 		_, err := s.gz.Write(line)

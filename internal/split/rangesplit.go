@@ -12,6 +12,7 @@ import (
 )
 
 var rangeReadBlockSize int64 = 32 * 1024 * 1024
+var rangeHeaderReadSize int64 = 64 * 1024
 
 func Range(ctx context.Context, rawURI string, src provider.StorageProvider, parsed *uri.ParsedURI, meta *provider.ObjectMeta, outDir string, opts Options) (*Result, error) {
 	if parsed == nil || parsed.Provider == uri.ProviderLocal {
@@ -55,7 +56,7 @@ func Range(ctx context.Context, rawURI string, src provider.StorageProvider, par
 		Detected:     detected,
 	}
 
-	headerLine, offset, err := readRangeHeader(ctx, src, rawURI, opts.Header)
+	headerLine, offset, err := readRangeHeader(ctx, src, rawURI, meta.Size, opts.Header)
 	if err != nil {
 		return nil, err
 	}
@@ -173,23 +174,43 @@ func Range(ctx context.Context, rawURI string, src provider.StorageProvider, par
 	return result, nil
 }
 
-func readRangeHeader(ctx context.Context, src provider.StorageProvider, rawURI string, header bool) ([]byte, int64, error) {
+func readRangeHeader(ctx context.Context, src provider.StorageProvider, rawURI string, size int64, header bool) ([]byte, int64, error) {
 	if !header {
 		return nil, 0, nil
 	}
-	r, err := src.OpenReader(ctx, rawURI, 0, -1)
-	if err != nil {
-		return nil, 0, err
+	var line []byte
+	var offset int64
+	for {
+		remaining := size - offset
+		if remaining <= 0 {
+			return line, int64(len(line)), nil
+		}
+		length := minInt64(rangeHeaderReadSize, remaining)
+		r, err := src.OpenReader(ctx, rawURI, offset, length)
+		if err != nil {
+			return nil, 0, err
+		}
+		chunk, readErr := readLine(bufio.NewReaderSize(r, splitReadBufferSize))
+		closeErr := r.Close()
+		if readErr != nil && readErr != io.EOF {
+			return nil, 0, readErr
+		}
+		if closeErr != nil {
+			return nil, 0, closeErr
+		}
+		if len(chunk) == 0 {
+			return nil, 0, nil
+		}
+		line = append(line, chunk...)
+		if idx := bytes.IndexByte(line, '\n'); idx >= 0 {
+			line = line[:idx+1]
+			return line, int64(len(line)), nil
+		}
+		offset += int64(len(chunk))
+		if len(chunk) == 0 || offset >= size {
+			return line, int64(len(line)), nil
+		}
 	}
-	defer r.Close()
-	line, err := readLine(bufio.NewReaderSize(r, splitReadBufferSize))
-	if err != nil && err != io.EOF {
-		return nil, 0, err
-	}
-	if len(line) == 0 {
-		return nil, 0, nil
-	}
-	return append([]byte(nil), line...), int64(len(line)), nil
 }
 
 func readRangeChunk(ctx context.Context, src provider.StorageProvider, rawURI string, offset, length int64) ([]byte, error) {

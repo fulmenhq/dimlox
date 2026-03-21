@@ -146,7 +146,7 @@ func Split(ctx context.Context, rawURI string, opts Options) (*Result, error) {
 	case ModeBinary:
 		return Binary(ctx, rawURI, src, parsed, meta, outDir, resolved)
 	case ModeRange:
-		return nil, fmt.Errorf("split mode %q is not implemented yet in this Phase 4 slice", mode)
+		return Range(ctx, rawURI, src, parsed, meta, outDir, resolved)
 	default:
 		return nil, fmt.Errorf("unsupported split mode %q", mode)
 	}
@@ -161,7 +161,7 @@ func resolveMode(rawURI string, parsed *uri.ParsedURI, meta *provider.ObjectMeta
 			return ModeStream, nil
 		}
 		if parsed != nil && parsed.Provider != uri.ProviderLocal && isTextLike(rawURI, meta) {
-			return ModeStream, nil
+			return ModeRange, nil
 		}
 		if isTextLike(rawURI, meta) {
 			return ModeStream, nil

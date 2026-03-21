@@ -108,7 +108,7 @@ func Stream(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 		}
 
 		if shouldRotateStreamShard(opts, shard, dry) {
-			entry, err := closeStreamShard(rawURI, meta, manifest, opts, delimiter, encoding, index, shard, dry)
+			entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeStream, index, shard, dry)
 			if err != nil {
 				return nil, err
 			}
@@ -124,14 +124,14 @@ func Stream(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 
 	if opts.DryRun {
 		if !dry.empty() {
-			entry, err := closeStreamShard(rawURI, meta, manifest, opts, delimiter, encoding, index, nil, dry)
+			entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeStream, index, nil, dry)
 			if err != nil {
 				return nil, err
 			}
 			result.Shards = append(result.Shards, entry)
 		}
 	} else if shard != nil {
-		entry, err := closeStreamShard(rawURI, meta, manifest, opts, delimiter, encoding, index, shard, dryShard{})
+		entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeStream, index, shard, dryShard{})
 		if err != nil {
 			return nil, err
 		}
@@ -172,9 +172,9 @@ func shouldRotateStreamShard(opts Options, shard *shardWriter, dry dryShard) boo
 	return false
 }
 
-func closeStreamShard(rawURI string, meta *provider.ObjectMeta, manifest *manifestWriter, opts Options, delimiter, encoding string, index int, shard *shardWriter, dry dryShard) (ManifestEntry, error) {
+func closeTextShard(rawURI string, meta *provider.ObjectMeta, manifest *manifestWriter, opts Options, delimiter, encoding string, mode Mode, index int, shard *shardWriter, dry dryShard) (ManifestEntry, error) {
 	if opts.DryRun {
-		entry := buildManifestEntry(rawURI, meta, dry.path, index, shardStats{rows: dry.rows, bytes: dry.bytes}, ModeStream, delimiter, encoding, opts.Header)
+		entry := buildManifestEntry(rawURI, meta, dry.path, index, shardStats{rows: dry.rows, bytes: dry.bytes}, mode, delimiter, encoding, opts.Header)
 		if err := manifest.Write(entry); err != nil {
 			return ManifestEntry{}, err
 		}
@@ -184,7 +184,7 @@ func closeStreamShard(rawURI string, meta *provider.ObjectMeta, manifest *manife
 	if err != nil {
 		return ManifestEntry{}, err
 	}
-	entry := buildManifestEntry(rawURI, meta, shard.finalPath, index, stats, ModeStream, delimiter, encoding, opts.Header)
+	entry := buildManifestEntry(rawURI, meta, shard.finalPath, index, stats, mode, delimiter, encoding, opts.Header)
 	if err := manifest.Write(entry); err != nil {
 		return ManifestEntry{}, err
 	}

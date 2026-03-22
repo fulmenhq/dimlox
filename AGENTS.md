@@ -109,6 +109,7 @@ master plan differ, follow the active brief and raise the discrepancy.
 | 3     | Inspect                  | Streaming wc on 594 M-row file; head/tail no full load  |
 | 4     | Split                    | Shards with atomic writes; peak RSS < 500 MB            |
 | 5     | Polish                   | TTY detection, dry-run, exit code audit                 |
+| 6     | Windows readiness        | Cross-compile clean; split preflight + rename on Windows |
 
 At each gate: open a PR, request devrev, and note in `.plans/roles/devlead/STATE.md`
 that architect review is needed before proceeding.

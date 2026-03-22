@@ -111,17 +111,23 @@ How it works:
 
 ## Output layout
 
-Shard names follow this pattern:
+Text shards follow this pattern:
 
 ```text
 <stem>_shard_NNNN.<ext>
+```
+
+Binary shards follow this pattern:
+
+```text
+<stem>_part_NNNN.bin
 ```
 
 Examples:
 
 - `orders_shard_0001.psv`
 - `orders_shard_0002.psv.gz`
-- `archive_shard_0003.bin`
+- `archive_part_0003.bin`
 
 `--out-fmt` controls the output extension and compression behavior:
 

@@ -4,12 +4,23 @@
 Google Cloud Storage, and local filesystems without loading whole files into
 memory.
 
+It is built for technical users who move large datasets for a living: data
+engineers and devops operators who need reliable transfers, plus QA and
+pipeline testers who need repeatable inspection and sharding.
+
 It is built for the workflows that usually turn into brittle shell pipelines or
 custom one-off scripts:
 
 - download a multi-GB file without guessing whether it will fit in RAM
 - inspect row counts, samples, and delimiters before touching the full payload
 - split large text files into repeatable shards with manifests and atomic writes
+
+## Start here
+
+- New user path: [`docs/adoption/quickstart.md`](docs/adoption/quickstart.md)
+- Why this exists: [`docs/adoption/positioning.md`](docs/adoption/positioning.md)
+- Honest comparisons: [`docs/adoption/vs-existing.md`](docs/adoption/vs-existing.md)
+- Workflow recipes: [`docs/adoption/recipes.md`](docs/adoption/recipes.md)
 
 ## Quick start
 

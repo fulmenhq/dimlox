@@ -79,14 +79,15 @@ Examples:
 ```
 author (devlead) → devrev (code review)
                        ├→ human security review (if auth, credentials, or provider client code)
-                       └→ human merge (rebase-merge only)
+                       └→ human merge
 ```
 
 - All PRs require at least one devrev review.
 - Auth chain changes, credential handling, and provider client construction trigger
   security review by the human maintainer until a local `secrev` role file is added.
 - Human always performs the merge.
-- Merge strategy: **rebase-merge** only.
+- Merge strategy: **squash-merge** (default) or **rebase-merge**. Merge commits
+  are disabled. Squash uses the PR title and body for the commit message.
 
 ---
 

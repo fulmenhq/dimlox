@@ -4,6 +4,8 @@ import (
 	"compress/gzip"
 	"crypto/md5"
 	"os"
+
+	"github.com/fulmenhq/dimlox/internal/fileutil"
 )
 
 type shardStats struct {
@@ -20,6 +22,23 @@ type shardWriter struct {
 	writer    *countingHashWriter
 	rows      int64
 	closed    bool
+}
+
+func (s *shardWriter) Abort() error {
+	if s == nil || s.closed {
+		return nil
+	}
+	s.closed = true
+	if s.gz != nil {
+		_ = s.gz.Close()
+	}
+	if s.file != nil {
+		_ = s.file.Close()
+	}
+	if s.tempPath != "" {
+		_ = os.Remove(s.tempPath)
+	}
+	return nil
 }
 
 func newShardWriter(path string, compress bool) (*shardWriter, error) {
@@ -78,7 +97,7 @@ func (s *shardWriter) Close() (shardStats, error) {
 	if err := s.file.Close(); err != nil {
 		return shardStats{}, err
 	}
-	if err := os.Rename(s.tempPath, s.finalPath); err != nil {
+	if err := fileutil.AtomicRename(s.tempPath, s.finalPath, true); err != nil {
 		return shardStats{}, err
 	}
 	return shardStats{rows: s.rows, bytes: s.writer.n, md5: s.writer.hash.Sum(nil)}, nil

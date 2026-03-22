@@ -137,8 +137,13 @@ func Split(ctx context.Context, rawURI string, opts Options) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	baseName := sourceBaseName(rawURI, parsed, meta)
+	if err := preflightSplitOutputs(outDir, baseName, meta, mode, opts, isCompressed(rawURI, meta)); err != nil {
+		return nil, err
+	}
 	resolved := opts
 	resolved.Mode = mode
+	resolved.OutDir = outDir
 
 	switch mode {
 	case ModeStream:

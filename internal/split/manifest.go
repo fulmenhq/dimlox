@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/fulmenhq/dimlox/internal/fileutil"
 	"github.com/fulmenhq/dimlox/internal/provider"
 )
 
@@ -35,6 +36,20 @@ type manifestWriter struct {
 	enc    *json.Encoder
 	dryRun bool
 	closed bool
+}
+
+func (m *manifestWriter) Abort() error {
+	if m == nil || m.dryRun || m.closed {
+		return nil
+	}
+	m.closed = true
+	if m.file != nil {
+		_ = m.file.Close()
+	}
+	if m.temp != "" {
+		_ = os.Remove(m.temp)
+	}
+	return nil
 }
 
 func newManifestWriter(path string, enabled, dryRun bool) (*manifestWriter, error) {
@@ -78,14 +93,18 @@ func (m *manifestWriter) Close() error {
 	if err := m.file.Close(); err != nil {
 		return err
 	}
-	return os.Rename(m.temp, m.path)
+	return fileutil.AtomicRename(m.temp, m.path, true)
 }
 
-func buildManifestEntry(rawURI string, meta *provider.ObjectMeta, shardPath string, index int, stats shardStats, mode Mode, delimiter, encoding string, header bool) ManifestEntry {
+func buildManifestEntry(rawURI string, meta *provider.ObjectMeta, outDir, shardPath string, index int, stats shardStats, mode Mode, delimiter, encoding string, header bool) ManifestEntry {
+	relPath, err := filepath.Rel(outDir, shardPath)
+	if err != nil {
+		relPath = shardPath
+	}
 	entry := ManifestEntry{
 		SourceURI:    rawURI,
 		ShardIndex:   index,
-		ShardFile:    filepath.Clean(shardPath),
+		ShardFile:    filepath.ToSlash(filepath.Clean(relPath)),
 		ShardRows:    stats.rows,
 		ShardBytes:   stats.bytes,
 		SplitMode:    mode,

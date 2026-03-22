@@ -44,7 +44,7 @@ GONEAT_VERSION  ?= v0.5.8
 SFETCH  = $(shell [ -x "$(BIN_DIR)/sfetch" ]  && echo "$(BIN_DIR)/sfetch"  || command -v sfetch  2>/dev/null)
 GONEAT  = $(shell [ -x "$(BIN_DIR)/goneat" ]  && echo "$(BIN_DIR)/goneat"  || command -v goneat  2>/dev/null)
 
-.PHONY: all help build build-all test check fmt vet lint assess \
+.PHONY: all help build build-all build-windows test check fmt vet lint assess \
         install clean version version-check version-set \
         version-patch version-minor version-major \
         precommit prepush bootstrap tools
@@ -71,13 +71,20 @@ build: ## Build for current platform
 		-o $(BUILD_ARTIFACT) $(MAIN)
 	@echo "[ok] Built $(BUILD_ARTIFACT)"
 
-build-all: ## Build for linux/darwin × amd64/arm64
+build-all: ## Build for linux/darwin/windows × amd64/arm64
 	@mkdir -p dist/release
 	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/release/$(NAME)-darwin-amd64  $(MAIN)
 	CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/release/$(NAME)-darwin-arm64  $(MAIN)
 	CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/release/$(NAME)-linux-amd64   $(MAIN)
 	CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/release/$(NAME)-linux-arm64   $(MAIN)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/release/$(NAME)-windows-amd64.exe $(MAIN)
+	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/release/$(NAME)-windows-arm64.exe $(MAIN)
 	@echo "[ok] Built all targets to dist/release/"
+
+build-windows: ## Cross-compile for Windows amd64 and arm64
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="$(LDFLAGS)" $(MAIN)
+	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -ldflags="$(LDFLAGS)" $(MAIN)
+	@echo "[ok] Windows cross-compiles passed"
 
 # -----------------------------------------------------------------------------
 # Quality (the four gates referenced in AGENTS.md)

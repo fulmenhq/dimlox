@@ -35,7 +35,7 @@ func Stream(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 	}
 	defer func() {
 		if manifest != nil {
-			_ = manifest.Close()
+			_ = manifest.Abort()
 		}
 	}()
 
@@ -54,9 +54,17 @@ func Stream(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 	br := bufio.NewReaderSize(r, splitReadBufferSize)
 	var headerLine []byte
 	var shard *shardWriter
+	defer func() {
+		if shard != nil {
+			_ = shard.Abort()
+		}
+	}()
 	var dry dryShard
 	index := 0
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		line, readErr := readLine(br)
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
 			return nil, readErr
@@ -142,6 +150,7 @@ func Stream(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 		if err := manifest.Close(); err != nil {
 			return nil, err
 		}
+		manifest = nil
 	}
 	return result, nil
 }
@@ -174,7 +183,7 @@ func shouldRotateStreamShard(opts Options, shard *shardWriter, dry dryShard) boo
 
 func closeTextShard(rawURI string, meta *provider.ObjectMeta, manifest *manifestWriter, opts Options, delimiter, encoding string, mode Mode, index int, shard *shardWriter, dry dryShard) (ManifestEntry, error) {
 	if opts.DryRun {
-		entry := buildManifestEntry(rawURI, meta, dry.path, index, shardStats{rows: dry.rows, bytes: dry.bytes}, mode, delimiter, encoding, opts.Header)
+		entry := buildManifestEntry(rawURI, meta, opts.OutDir, dry.path, index, shardStats{rows: dry.rows, bytes: dry.bytes}, mode, delimiter, encoding, opts.Header)
 		if err := manifest.Write(entry); err != nil {
 			return ManifestEntry{}, err
 		}
@@ -184,7 +193,8 @@ func closeTextShard(rawURI string, meta *provider.ObjectMeta, manifest *manifest
 	if err != nil {
 		return ManifestEntry{}, err
 	}
-	entry := buildManifestEntry(rawURI, meta, shard.finalPath, index, stats, mode, delimiter, encoding, opts.Header)
+	finalPath := shard.finalPath
+	entry := buildManifestEntry(rawURI, meta, opts.OutDir, finalPath, index, stats, mode, delimiter, encoding, opts.Header)
 	if err := manifest.Write(entry); err != nil {
 		return ManifestEntry{}, err
 	}

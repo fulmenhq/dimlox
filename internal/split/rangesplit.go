@@ -40,7 +40,7 @@ func Range(ctx context.Context, rawURI string, src provider.StorageProvider, par
 	}
 	defer func() {
 		if manifest != nil {
-			_ = manifest.Close()
+			_ = manifest.Abort()
 		}
 	}()
 
@@ -62,6 +62,11 @@ func Range(ctx context.Context, rawURI string, src provider.StorageProvider, par
 	}
 
 	var shard *shardWriter
+	defer func() {
+		if shard != nil {
+			_ = shard.Abort()
+		}
+	}()
 	var dry dryShard
 	index := 0
 	startShard := func() error {
@@ -139,6 +144,9 @@ func Range(ctx context.Context, rawURI string, src provider.StorageProvider, par
 
 	var carry []byte
 	for offset < meta.Size {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		length := minInt64(rangeReadBlockSize, meta.Size-offset)
 		chunk, err := readRangeChunk(ctx, src, rawURI, offset, length)
 		if err != nil {
@@ -170,6 +178,7 @@ func Range(ctx context.Context, rawURI string, src provider.StorageProvider, par
 		if err := manifest.Close(); err != nil {
 			return nil, err
 		}
+		manifest = nil
 	}
 	return result, nil
 }

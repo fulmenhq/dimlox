@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/fulmenhq/dimlox/internal/split"
+	"github.com/fulmenhq/dimlox/internal/uri"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +31,13 @@ func splitCmd() *cobra.Command {
 			azProfile, _ := cmd.Flags().GetString("az-profile")
 			gcpProject, _ := cmd.Flags().GetString("gcp-project")
 			landingDir, _ := cmd.Flags().GetString("landing")
+			handleErr := func(err error) error {
+				var unsupported *uri.ErrUnsupportedScheme
+				if errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) || isBadInputError(err) {
+					return withExitCode(exitBadURI, "%v", err)
+				}
+				return withExitCode(exitOperational, "%v", err)
+			}
 			res, err := split.Split(cmd.Context(), args[0], split.Options{
 				ProviderOptions: split.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject},
 				Mode:            split.Mode(mode),
@@ -44,7 +53,7 @@ func splitCmd() *cobra.Command {
 				SampleBytes:     sampleBytes,
 			})
 			if err != nil {
-				return withExitCode(exitOperational, "%v", err)
+				return handleErr(err)
 			}
 			return printSplit(cmd, res)
 		},

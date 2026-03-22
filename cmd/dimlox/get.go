@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/fulmenhq/dimlox/internal/transfer"
+	"github.com/fulmenhq/dimlox/internal/uri"
 	"github.com/spf13/cobra"
 )
 
@@ -40,6 +41,10 @@ func getCmd() *cobra.Command {
 			if err != nil {
 				if errors.Is(err, transfer.ErrChecksumMismatch) {
 					return withExitCode(exitChecksumMismatch, "%v", err)
+				}
+				var unsupported *uri.ErrUnsupportedScheme
+				if errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) {
+					return withExitCode(exitBadURI, "%v", err)
 				}
 				return withExitCode(exitOperational, "%v", err)
 			}

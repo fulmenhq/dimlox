@@ -52,6 +52,26 @@ func TestInspectRequiresMode(t *testing.T) {
 	if !strings.Contains(err.Error(), "inspect requires one of") {
 		t.Fatalf("error = %q, want inspect mode guidance", err.Error())
 	}
+	if got := exitCodeFor(err); got != exitBadURI {
+		t.Fatalf("exitCodeFor(inspect missing mode) = %d, want %d", got, exitBadURI)
+	}
+}
+
+func TestInspectInvalidFormatExitCode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sample.txt")
+	if err := os.WriteFile(path, []byte("a\n"), 0o644); err != nil {
+		t.Fatalf("write sample: %v", err)
+	}
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"inspect", "--wc", "--format", "yaml", path})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want error")
+	}
+	if got := exitCodeFor(err); got != exitBadURI {
+		t.Fatalf("exitCodeFor(inspect invalid format) = %d, want %d", got, exitBadURI)
+	}
 }
 
 func TestInspectHeadTextOutput(t *testing.T) {

@@ -4,6 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
+	"syscall"
+
+	"github.com/fulmenhq/dimlox/internal/uri"
 )
 
 const (
@@ -11,6 +15,7 @@ const (
 	exitOperational      = 1
 	exitBadURI           = 2
 	exitChecksumMismatch = 3
+	exitDiskFull         = 4
 )
 
 type exitError struct {
@@ -33,15 +38,68 @@ func (e *exitError) Unwrap() error {
 }
 
 func withExitCode(code int, format string, args ...any) error {
+	if format == "%v" && len(args) == 1 {
+		if err, ok := args[0].(error); ok {
+			return &exitError{code: code, err: err}
+		}
+	}
 	return &exitError{code: code, err: fmt.Errorf(format, args...)}
 }
 
 func exitCodeFor(err error) int {
+	if err == nil {
+		return exitSuccess
+	}
+	if isDiskFullError(err) {
+		return exitDiskFull
+	}
+	if isBadInputError(err) {
+		return exitBadURI
+	}
 	var ee *exitError
 	if errors.As(err, &ee) {
 		return ee.code
 	}
 	return exitOperational
+}
+
+func isBadInputError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var unsupported *uri.ErrUnsupportedScheme
+	if errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) {
+		return true
+	}
+	msg := err.Error()
+	for _, marker := range []string{
+		"invalid --format ",
+		"invalid --out-fmt ",
+		"invalid split mode ",
+		"split requires --rows > 0 or --bytes > 0",
+		"inspect requires one of ",
+		"accepts ",
+		"requires at least ",
+		"requires at most ",
+		"requires between ",
+		"unknown flag: ",
+		"unknown command ",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func isDiskFullError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.ENOSPC) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "no space left on device")
 }
 
 func exitWithError(err error) {

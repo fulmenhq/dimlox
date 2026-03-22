@@ -1,9 +1,13 @@
 package azblob
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 func TestAzureConfigDirUsesAzureProfilesDirEnv(t *testing.T) {
@@ -72,5 +76,23 @@ func TestAzureConfigDirFallsBackToLegacyPath(t *testing.T) {
 	want := filepath.Join(home, ".azure", "profiles", "legacy")
 	if got != want {
 		t.Fatalf("azureConfigDir() = %q, want %q", got, want)
+	}
+}
+
+func TestProbeAuthReturnsTokenExpiry(t *testing.T) {
+	origGetToken := getAzureAccessToken
+	t.Cleanup(func() { getAzureAccessToken = origGetToken })
+
+	wantExpiry := time.Date(2026, 3, 22, 16, 30, 0, 0, time.UTC)
+	getAzureAccessToken = func(context.Context, string) (azcore.AccessToken, error) {
+		return azcore.AccessToken{Token: "redacted", ExpiresOn: wantExpiry}, nil
+	}
+
+	details, err := ProbeAuth(context.Background(), "client-a")
+	if err != nil {
+		t.Fatalf("ProbeAuth() error = %v", err)
+	}
+	if details == nil || !details.TokenExpiry.Equal(wantExpiry) {
+		t.Fatalf("ProbeAuth() expiry = %v, want %v", details.TokenExpiry, wantExpiry)
 	}
 }

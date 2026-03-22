@@ -4,18 +4,17 @@ Data in motion — large-file transfer, inspection, and splitting across Azure B
 
 dimlox is designed for files too large to load into memory. All operations stream — peak RSS is a first-class correctness criterion.
 
-## Status
+## Commands
 
-**v0.1.0 — Phase 0 (scaffold)**. The CLI root, URI parser, and provider interface are in place. Commands are being added phase by phase.
-
-| Phase | Commands | Status |
-|---|---|---|
-| 0 | Scaffold — module, cobra root, URI parser, provider interface | complete |
-| 1 | `doctor`, `ls` — auth check and container/bucket listing | pending |
-| 2 | `get`, `put`, `cp` — parallel transfer with landing area | pending |
-| 3 | `inspect` — streaming wc, head/mid/tail, encoding detection | pending |
-| 4 | `split` — row-split, range-split, binary-split, manifest | pending |
-| 5 | Polish — TTY detection, dry-run, exit code audit | pending |
+| Command | Purpose |
+|---|---|
+| `doctor` | Auth and connectivity checks |
+| `ls` | Container/bucket listing |
+| `get` | Download (parallel, streaming) |
+| `put` | Upload (resumable) |
+| `cp` | Cross-provider copy |
+| `inspect` | Streaming wc, head/mid/tail, encoding detection |
+| `split` | Row-split, range-split, binary-split with manifest |
 
 ## Supported URI forms
 

@@ -49,7 +49,7 @@ func validateSourceName(sourceName string) error {
 }
 
 func longestPlannedOutputPath(outDir, sourceName string, meta *provider.ObjectMeta, mode Mode, opts Options, sourceCompressed bool) (string, error) {
-	paths := []string{manifestPath(outDir, sourceName)}
+	paths := []string{manifestPath(outDir, sourceName), manifestPath(outDir, sourceName) + ".part"}
 	maxIndex := estimatedMaxShardIndex(meta, mode, opts)
 	compressOut := false
 	if mode != ModeBinary {
@@ -58,9 +58,11 @@ func longestPlannedOutputPath(outDir, sourceName string, meta *provider.ObjectMe
 		if err != nil {
 			return "", err
 		}
-		paths = append(paths, textShardPath(outDir, sourceName, maxIndex, compressOut))
+		shardPath := textShardPath(outDir, sourceName, maxIndex, compressOut)
+		paths = append(paths, shardPath, shardPath+".part")
 	} else {
-		paths = append(paths, binaryShardPath(outDir, sourceName, maxIndex))
+		shardPath := binaryShardPath(outDir, sourceName, maxIndex)
+		paths = append(paths, shardPath, shardPath+".part")
 	}
 	longest := paths[0]
 	for _, candidate := range paths[1:] {

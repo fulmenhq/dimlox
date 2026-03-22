@@ -480,6 +480,43 @@ func TestPreflightSplitOutputsErrorsOnWindowsLongPath(t *testing.T) {
 	}
 }
 
+func TestPreflightSplitOutputsIncludesPartSuffixLength(t *testing.T) {
+	origGOOS := splitRuntimeGOOS
+	origStderr := splitPreflightStderr
+	t.Cleanup(func() {
+		splitRuntimeGOOS = origGOOS
+		splitPreflightStderr = origStderr
+	})
+
+	splitRuntimeGOOS = "windows"
+	splitPreflightStderr = io.Discard
+	baseDir := t.TempDir()
+	baseName := "orders.psv"
+	var outDir string
+	var finalPath string
+	found := false
+	for pad := 1; pad < windowsMaxPath; pad++ {
+		candidate := filepath.Join(baseDir, strings.Repeat("x", pad))
+		path := textShardPath(candidate, baseName, 1, false)
+		if len(path) < windowsMaxPath && len(path+".part") >= windowsMaxPath {
+			outDir = candidate
+			finalPath = path
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("failed to construct near-limit final/temp path case")
+	}
+	if len(finalPath+".part") < windowsMaxPath {
+		t.Fatalf("temp path len = %d, want at least %d", len(finalPath+".part"), windowsMaxPath)
+	}
+	err := preflightSplitOutputs(outDir, baseName, &provider.ObjectMeta{Size: 1}, ModeStream, Options{Rows: 1}, false)
+	if err == nil || !strings.Contains(err.Error(), ".part") {
+		t.Fatalf("preflightSplitOutputs() error = %v, want temp-path failure mentioning .part", err)
+	}
+}
+
 func TestPreflightSplitOutputsWarnsOnNonWindowsLongPath(t *testing.T) {
 	origGOOS := splitRuntimeGOOS
 	origStderr := splitPreflightStderr

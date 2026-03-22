@@ -119,10 +119,11 @@ func TestRefuseCompressedCloudTailReturnsAdvisoryWithoutOpen(t *testing.T) {
 	if !strings.Contains(msg, "--tail on a compressed cloud source") {
 		t.Fatalf("error = %q, want tail refusal guidance", msg)
 	}
-	if !strings.Contains(msg, "dimlox get azblob://acct/ctr/file.gz /tmp/file.gz") {
+	wantLocal := filepath.Join(os.TempDir(), "file.gz")
+	if !strings.Contains(msg, "dimlox get azblob://acct/ctr/file.gz "+wantLocal) {
 		t.Fatalf("error = %q, want concrete get recipe", msg)
 	}
-	if !strings.Contains(msg, "dimlox inspect --tail 5 /tmp/file.gz") {
+	if !strings.Contains(msg, "dimlox inspect --tail 5 "+wantLocal) {
 		t.Fatalf("error = %q, want counted local inspect recipe", msg)
 	}
 	if !strings.Contains(msg, "To stream anyway: add --force-stream") {

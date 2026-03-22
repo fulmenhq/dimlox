@@ -142,6 +142,14 @@ Examples:
 3. `DIMLOX_LANDING_DIR`
 4. current working directory
 
+## Windows readiness notes
+
+- before any real split I/O, `dimlox` preflights the longest planned output path
+- at the 260-character portability limit, Windows errors before writing files and other platforms emit a warning
+- this check runs in both normal and `--dry-run` mode so you can shorten `--out-dir` before committing to output
+- source filename stems that contain Windows-illegal characters such as `< > : " / \ | ? *` are rejected before writing shards
+- manifest `shard_file` values stay forward-slash relative paths even when the local filesystem uses backslashes
+
 ## Manifest
 
 Manifest output is enabled by default.

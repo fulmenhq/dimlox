@@ -48,7 +48,7 @@ Two path domains exist in dimlox and must never be conflated:
 | Domain | Separator | When to use |
 |--------|-----------|-------------|
 | **OS-native** | `filepath.Join`, `filepath.Separator` | Local file I/O: opening, creating, renaming, and stating files |
-| **Portable** | Forward slash (`/`) always | URI paths, manifest entries (`shard_path`, `source_uri`), cloud object keys, CLI output for object listings |
+| **Portable** | Forward slash (`/`) always | URI paths, manifest entries (`shard_file`, `source_uri`), cloud object keys, CLI output for object listings |
 
 **Rules:**
 

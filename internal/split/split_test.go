@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -75,6 +76,9 @@ func TestStreamSplitLocalWithHeaderAndManifest(t *testing.T) {
 	}
 	if entry.ShardRows != 2 || !entry.HeaderCopied || entry.Delimiter != "|" {
 		t.Fatalf("manifest entry = %+v", entry)
+	}
+	if entry.ShardFile != "sample_shard_0001.psv" {
+		t.Fatalf("manifest shard_file = %q, want relative portable path", entry.ShardFile)
 	}
 	if matches, err := filepath.Glob(filepath.Join(outDir, "*.part")); err != nil {
 		t.Fatalf("Glob: %v", err)
@@ -418,6 +422,91 @@ func TestBinarySplitUsesFixedReadBuffer(t *testing.T) {
 	}
 }
 
+func TestBinarySplitCancelsWithoutLeavingPartFiles(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	parsed, err := uri.Parse("gs://bucket/sample.bin")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	tracker := &cancelAfterFirstReadCloser{Reader: bytes.NewReader([]byte("abcdefgh")), cancel: cancel}
+	fake := &stubSplitProvider{
+		meta: &provider.ObjectMeta{Name: "sample.bin", Size: 8, ContentType: "application/octet-stream"},
+		readerFactory: func(int64, int64) (io.ReadCloser, error) {
+			tracker.Reader.Seek(0, io.SeekStart)
+			tracker.fired = false
+			return tracker, nil
+		},
+	}
+	oldResolver := providerResolver
+	oldBufferSize := binaryCopyBufferSize
+	providerResolver = func(context.Context, string, ProviderOptions) (provider.StorageProvider, *uri.ParsedURI, error) {
+		return fake, parsed, nil
+	}
+	binaryCopyBufferSize = 1
+	defer func() {
+		providerResolver = oldResolver
+		binaryCopyBufferSize = oldBufferSize
+	}()
+
+	_, err = Split(ctx, "gs://bucket/sample.bin", Options{Mode: ModeBinary, Bytes: 8, OutDir: outDir, Manifest: true})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Split() error = %v, want context.Canceled", err)
+	}
+	if matches, err := filepath.Glob(filepath.Join(outDir, "*.part")); err != nil {
+		t.Fatalf("Glob: %v", err)
+	} else if len(matches) != 0 {
+		t.Fatalf("part files = %v, want none", matches)
+	}
+}
+
+func TestPreflightSplitOutputsErrorsOnWindowsLongPath(t *testing.T) {
+	origGOOS := splitRuntimeGOOS
+	origStderr := splitPreflightStderr
+	t.Cleanup(func() {
+		splitRuntimeGOOS = origGOOS
+		splitPreflightStderr = origStderr
+	})
+
+	splitRuntimeGOOS = "windows"
+	splitPreflightStderr = io.Discard
+	outDir := filepath.Join(t.TempDir(), strings.Repeat("deep", 70))
+	err := preflightSplitOutputs(outDir, "orders.psv", &provider.ObjectMeta{Size: 10}, ModeStream, Options{Rows: 1}, false)
+	if err == nil || !strings.Contains(err.Error(), "260-character") {
+		t.Fatalf("preflightSplitOutputs() error = %v, want Windows path-length failure", err)
+	}
+}
+
+func TestPreflightSplitOutputsWarnsOnNonWindowsLongPath(t *testing.T) {
+	origGOOS := splitRuntimeGOOS
+	origStderr := splitPreflightStderr
+	t.Cleanup(func() {
+		splitRuntimeGOOS = origGOOS
+		splitPreflightStderr = origStderr
+	})
+
+	var buf bytes.Buffer
+	splitRuntimeGOOS = "linux"
+	splitPreflightStderr = &buf
+	outDir := filepath.Join(t.TempDir(), strings.Repeat("deep", 70))
+	if err := preflightSplitOutputs(outDir, "orders.psv", &provider.ObjectMeta{Size: 10}, ModeStream, Options{Rows: 1}, false); err != nil {
+		t.Fatalf("preflightSplitOutputs() error = %v, want warning only", err)
+	}
+	if !strings.Contains(buf.String(), "warning:") {
+		t.Fatalf("warning output = %q, want warning", buf.String())
+	}
+}
+
+func TestPreflightSplitOutputsRejectsWindowsIllegalStem(t *testing.T) {
+	err := preflightSplitOutputs(t.TempDir(), `bad:name.psv`, &provider.ObjectMeta{Size: 10}, ModeStream, Options{Rows: 1}, false)
+	if err == nil || !strings.Contains(err.Error(), "invalid on Windows") {
+		t.Fatalf("preflightSplitOutputs() error = %v, want illegal-stem rejection", err)
+	}
+}
+
 type openRequest struct {
 	offset int64
 	length int64
@@ -479,6 +568,23 @@ func (t *trackingReadCloser) Read(p []byte) (int, error) {
 }
 
 func (t *trackingReadCloser) Close() error { return nil }
+
+type cancelAfterFirstReadCloser struct {
+	*bytes.Reader
+	cancel func()
+	fired  bool
+}
+
+func (c *cancelAfterFirstReadCloser) Read(p []byte) (int, error) {
+	n, err := c.Reader.Read(p)
+	if n > 0 && !c.fired {
+		c.fired = true
+		c.cancel()
+	}
+	return n, err
+}
+
+func (c *cancelAfterFirstReadCloser) Close() error { return nil }
 
 func (s *stubSplitProvider) DownloadFile(context.Context, string, *os.File, provider.DownloadOptions) error {
 	return nil

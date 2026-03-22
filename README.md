@@ -154,6 +154,19 @@ Default install location:
 - Linux / macOS: `~/.local/bin/dimlox`
 - Windows: `%APPDATA%/dimlox/bin/dimlox.exe`
 
+## Windows status
+
+Windows is part of the active support target for `v0.1.0`.
+
+- cross-compiles are expected to pass for Windows amd64 and arm64
+- local file I/O uses OS-native paths, but manifest shard paths remain portable forward slashes
+- `split` preflights planned output paths at the 260-character portability limit before writing files
+
+Known limitations:
+
+- maintainer validation on a real Windows host is still the final runtime check for this phase
+- legacy Windows consoles may fall back to plain progress output; non-TTY runs still emit structured JSON Lines progress on `stderr`
+
 ## Authentication
 
 **Azure Blob Storage** — uses `DefaultAzureCredential`. Activate the right CLI profile first:

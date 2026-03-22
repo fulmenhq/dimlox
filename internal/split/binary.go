@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 
 	"github.com/fulmenhq/dimlox/internal/provider"
 	"github.com/fulmenhq/dimlox/internal/uri"
@@ -27,7 +26,7 @@ func Binary(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 	}
 	defer func() {
 		if manifest != nil {
-			_ = manifest.Close()
+			_ = manifest.Abort()
 		}
 	}()
 
@@ -35,13 +34,16 @@ func Binary(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 	buf := make([]byte, binaryReadBufferSize(opts.Bytes))
 	index := 0
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		nextIndex := index + 1
 		path := binaryShardPath(outDir, baseName, nextIndex)
 		var entry ManifestEntry
 		var stats shardStats
 		reachedEOF := false
 		if opts.DryRun {
-			stats, reachedEOF, err = readBinaryShard(r, opts.Bytes, buf, nil)
+			stats, reachedEOF, err = readBinaryShard(ctx, r, opts.Bytes, buf, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -49,19 +51,19 @@ func Binary(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 				break
 			}
 			index = nextIndex
-			entry = buildManifestEntry(rawURI, meta, path, index, stats, ModeBinary, "", "", false)
+			entry = buildManifestEntry(rawURI, meta, outDir, path, index, stats, ModeBinary, "", "", false)
 		} else {
 			shard, err := newShardWriter(path, false)
 			if err != nil {
 				return nil, err
 			}
-			stats, reachedEOF, err = readBinaryShard(r, opts.Bytes, buf, shard)
+			stats, reachedEOF, err = readBinaryShard(ctx, r, opts.Bytes, buf, shard)
 			if err != nil {
+				_ = shard.Abort()
 				return nil, err
 			}
 			if stats.bytes == 0 {
-				_ = shard.file.Close()
-				_ = os.Remove(shard.tempPath)
+				_ = shard.Abort()
 				break
 			}
 			index = nextIndex
@@ -69,7 +71,7 @@ func Binary(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 			if err != nil {
 				return nil, err
 			}
-			entry = buildManifestEntry(rawURI, meta, path, index, stats, ModeBinary, "", "", false)
+			entry = buildManifestEntry(rawURI, meta, outDir, path, index, stats, ModeBinary, "", "", false)
 		}
 		if err := manifest.Write(entry); err != nil {
 			return nil, err
@@ -88,10 +90,13 @@ func Binary(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 	return result, nil
 }
 
-func readBinaryShard(r io.Reader, shardBytes int64, buf []byte, shard *shardWriter) (shardStats, bool, error) {
+func readBinaryShard(ctx context.Context, r io.Reader, shardBytes int64, buf []byte, shard *shardWriter) (shardStats, bool, error) {
 	remaining := shardBytes
 	var stats shardStats
 	for remaining > 0 {
+		if err := ctx.Err(); err != nil {
+			return shardStats{}, false, err
+		}
 		chunk := buf
 		if int64(len(chunk)) > remaining {
 			chunk = chunk[:remaining]

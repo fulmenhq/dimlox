@@ -96,7 +96,7 @@ func RefuseCompressedCloudSample(ctx context.Context, rawURI string, mode Sample
 	if !isCompressedCloud(rawURI, parsed, meta) {
 		return nil
 	}
-	localPath := filepath.Join("/tmp", basename(rawURI, parsed))
+	localPath := filepath.Join(os.TempDir(), basename(rawURI, parsed))
 	return fmt.Errorf("--%s on a compressed cloud source requires decompressing the entire file over the network. This is typically slower than downloading the file first.\n\nRecommended workflow:\n\n  dimlox get %s %s\n  dimlox inspect --%s %d %s\n\nIf local disk space allows, downloading first is faster and lets you run multiple inspect operations without re-streaming.\n\nTo stream anyway: add --force-stream", mode, rawURI, localPath, mode, count, localPath)
 }
 

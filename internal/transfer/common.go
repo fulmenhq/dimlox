@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/fulmenhq/dimlox/internal/fileutil"
 	"github.com/fulmenhq/dimlox/internal/provider"
 	"github.com/fulmenhq/dimlox/internal/providers"
 	"github.com/fulmenhq/dimlox/internal/uri"
@@ -163,7 +164,7 @@ func finalizeOutput(tempPath, finalPath string, overwrite bool) error {
 	if overwrite {
 		_ = os.Remove(finalPath)
 	}
-	return os.Rename(tempPath, finalPath)
+	return fileutil.AtomicRename(tempPath, finalPath, overwrite)
 }
 
 func checksumVerifier(meta *provider.ObjectMeta) (hash.Hash, []byte, bool) {

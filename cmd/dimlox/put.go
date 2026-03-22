@@ -1,7 +1,10 @@
 package main
 
 import (
+	"errors"
+
 	"github.com/fulmenhq/dimlox/internal/transfer"
+	"github.com/fulmenhq/dimlox/internal/uri"
 	"github.com/spf13/cobra"
 )
 
@@ -31,6 +34,10 @@ func putCmd() *cobra.Command {
 				LandingDir:      landingDir,
 			})
 			if err != nil {
+				var unsupported *uri.ErrUnsupportedScheme
+				if errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) {
+					return withExitCode(exitBadURI, "%v", err)
+				}
 				return withExitCode(exitOperational, "%v", err)
 			}
 			return nil

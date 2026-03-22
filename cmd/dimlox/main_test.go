@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
+	"syscall"
 	"testing"
 )
 
@@ -120,5 +122,42 @@ func TestDoctorBadURIExitCode(t *testing.T) {
 	}
 	if ee.code != exitBadURI {
 		t.Fatalf("exit code = %d, want %d", ee.code, exitBadURI)
+	}
+}
+
+func TestGetMissingArgsExitCode(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"get"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want error")
+	}
+	if got := exitCodeFor(err); got != exitBadURI {
+		t.Fatalf("exitCodeFor(get missing args) = %d, want %d (err=%v)", got, exitBadURI, err)
+	}
+}
+
+func TestSplitInvalidLimitsExitCode(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "sample.psv")
+	if err := os.WriteFile(src, []byte("a|b\n1|2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"split", "--rows", "0", "--bytes", "0", src})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want error")
+	}
+	if got := exitCodeFor(err); got != exitBadURI {
+		t.Fatalf("exitCodeFor(split invalid limits) = %d, want %d (err=%v)", got, exitBadURI, err)
+	}
+}
+
+func TestExitCodeForDiskFull(t *testing.T) {
+	err := withExitCode(exitOperational, "%v", &os.PathError{Op: "write", Path: "/tmp/out", Err: syscall.ENOSPC})
+	if got := exitCodeFor(err); got != exitDiskFull {
+		t.Fatalf("exitCodeFor(disk full) = %d, want %d", got, exitDiskFull)
 	}
 }

@@ -1,12 +1,19 @@
 package transfer
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"sync"
 	"sync/atomic"
 	"time"
+)
+
+var (
+	progressStdout      = os.Stdout
+	progressStderr      = os.Stderr
+	progressTTYDetector = isTerminal
 )
 
 type progressReporter struct {
@@ -21,12 +28,12 @@ type progressReporter struct {
 }
 
 func newProgressReporter(label string, total int64) *progressReporter {
-	stderr := os.Stderr
+	stderr := progressStderr
 	return &progressReporter{
 		label:       label,
 		out:         stderr,
 		total:       total,
-		interactive: isTerminal(os.Stdout),
+		interactive: progressTTYDetector(progressStdout) && progressTTYDetector(stderr),
 		start:       time.Now(),
 		done:        make(chan struct{}),
 	}
@@ -112,11 +119,24 @@ func (r *progressReporter) printStructured(final bool) {
 	if final {
 		status = "done"
 	}
+	event := map[string]any{
+		"status":          status,
+		"label":           r.label,
+		"bytes":           current,
+		"elapsed_seconds": elapsed.Round(time.Second).Seconds(),
+		"mbps":            speed,
+	}
 	if r.total > 0 {
-		_, _ = fmt.Fprintf(r.out, "%s label=%s bytes=%d total=%d pct=%.1f mbps=%.1f eta=%s\n", status, r.label, current, r.total, pct, speed, eta.Round(time.Second))
+		event["total"] = r.total
+		event["pct"] = pct
+		event["eta_seconds"] = eta.Round(time.Second).Seconds()
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		_, _ = fmt.Fprintf(r.out, "{\"status\":\"%s\",\"label\":%q,\"bytes\":%d}\n", status, r.label, current)
 		return
 	}
-	_, _ = fmt.Fprintf(r.out, "%s label=%s bytes=%d mbps=%.1f\n", status, r.label, current, speed)
+	_, _ = fmt.Fprintf(r.out, "%s\n", data)
 }
 
 func isTerminal(f *os.File) bool {

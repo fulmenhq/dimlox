@@ -16,6 +16,13 @@ import (
 	"github.com/fulmenhq/dimlox/internal/uri"
 )
 
+var (
+	probeAzureAuth        = providerazblob.ProbeAuth
+	probeGCSAuth          = providergcs.ProbeAuth
+	describeGCSAuthSource = providergcs.DescribeAuthSource
+	nowFunc               = time.Now
+)
+
 type Options struct {
 	AZProfile  string
 	GCPProject string
@@ -111,7 +118,8 @@ func probeLocal() Status {
 }
 
 func probeAzure(ctx context.Context, profile string) Status {
-	if err := providerazblob.ProbeAuth(ctx, profile); err != nil {
+	details, err := probeAzureAuth(ctx, profile)
+	if err != nil {
 		kind := classify(err)
 		return Status{Provider: "azblob", OK: false, Kind: kind, Detail: err.Error()}
 	}
@@ -119,19 +127,53 @@ func probeAzure(ctx context.Context, profile string) Status {
 	if profile != "" {
 		detail += fmt.Sprintf(" (az-profile=%s)", profile)
 	}
+	if suffix := formatTokenValidity(details.TokenExpiry, nowFunc()); suffix != "" {
+		detail += " (" + suffix + ")"
+	}
 	return Status{Provider: "azblob", OK: true, Detail: detail}
 }
 
 func probeGCS(ctx context.Context) Status {
-	if err := providergcs.ProbeAuth(ctx); err != nil {
+	details, err := probeGCSAuth(ctx)
+	if err != nil {
 		kind := classify(err)
 		return Status{Provider: "gcs", OK: false, Kind: kind, Detail: err.Error()}
 	}
-	detail, err := providergcs.DescribeAuthSource()
+	detail, err := describeGCSAuthSource()
 	if err != nil {
-		return Status{Provider: "gcs", OK: true, Detail: "ADC token acquired"}
+		detail = "ADC token acquired"
+	}
+	if suffix := formatTokenValidity(details.TokenExpiry, nowFunc()); suffix != "" {
+		detail += " (" + suffix + ")"
 	}
 	return Status{Provider: "gcs", OK: true, Detail: detail}
+}
+
+func formatTokenValidity(expiresAt, now time.Time) string {
+	if expiresAt.IsZero() {
+		return ""
+	}
+	remaining := expiresAt.Sub(now)
+	if remaining <= 0 {
+		return "token expired"
+	}
+	return "valid for " + formatDurationShort(remaining)
+}
+
+func formatDurationShort(d time.Duration) string {
+	if d <= 0 {
+		return "0m"
+	}
+	minutes := int64((d + time.Minute - 1) / time.Minute)
+	hours := minutes / 60
+	mins := minutes % 60
+	if hours == 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+	if mins == 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dh%dm", hours, mins)
 }
 
 func classify(err error) string {

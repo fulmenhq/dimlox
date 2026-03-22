@@ -47,6 +47,7 @@ catalog, selection guide, and escalation paths.
 | `deliverylead` | AGENTS coordination, gate sequencing, handoffs     | `config/agentic/roles/deliverylead.yaml` |
 | `entarch`      | Contract durability, rewrite-safe architecture     | `config/agentic/roles/entarch.yaml`      |
 | `infoarch`     | Docs, plan updates, decision records               | `config/agentic/roles/infoarch.yaml`     |
+| `prodmktg`     | Product positioning, devrel, adoption support      | `config/agentic/roles/prodmktg.yaml`     |
 
 Security review is still a required function for auth/credential changes, but a
 local `secrev` role file has not been added to this repo yet. Until it is,
@@ -108,6 +109,7 @@ master plan differ, follow the active brief and raise the discrepancy.
 | 3     | Inspect                  | Streaming wc on 594 M-row file; head/tail no full load  |
 | 4     | Split                    | Shards with atomic writes; peak RSS < 500 MB            |
 | 5     | Polish                   | TTY detection, dry-run, exit code audit                 |
+| 6     | Windows readiness        | Cross-compile clean; split preflight + rename on Windows |
 
 At each gate: open a PR, request devrev, and note in `.plans/roles/devlead/STATE.md`
 that architect review is needed before proceeding.

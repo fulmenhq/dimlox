@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/fulmenhq/dimlox/internal/inspect"
+	"github.com/fulmenhq/dimlox/internal/uri"
 	"github.com/spf13/cobra"
 )
 
@@ -28,51 +30,58 @@ func inspectCmd() *cobra.Command {
 			azProfile, _ := cmd.Flags().GetString("az-profile")
 			gcpProject, _ := cmd.Flags().GetString("gcp-project")
 			if format != "text" && format != "json" {
-				return withExitCode(exitOperational, "invalid --format %q (want text|json)", format)
+				return withExitCode(exitBadURI, "invalid --format %q (want text|json)", format)
+			}
+			handleErr := func(err error) error {
+				var unsupported *uri.ErrUnsupportedScheme
+				if errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) {
+					return withExitCode(exitBadURI, "%v", err)
+				}
+				return withExitCode(exitOperational, "%v", err)
 			}
 			switch {
 			case wcFlag:
 				res, err := inspect.WC(cmd.Context(), args[0], inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
 				if err != nil {
-					return withExitCode(exitOperational, "%v", err)
+					return handleErr(err)
 				}
 				return printWC(cmd, res, format)
 			case headN > 0:
 				res, err := inspect.Head(cmd.Context(), args[0], headN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
 				if err != nil {
-					return withExitCode(exitOperational, "%v", err)
+					return handleErr(err)
 				}
 				return printSample(cmd, res, format)
 			case midN > 0:
 				if !forceStream {
 					if err := inspect.RefuseCompressedCloudSample(cmd.Context(), args[0], inspect.SampleMid, midN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject}); err != nil {
-						return withExitCode(exitOperational, "%v", err)
+						return handleErr(err)
 					}
 				}
 				res, err := inspect.Mid(cmd.Context(), args[0], midN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
 				if err != nil {
-					return withExitCode(exitOperational, "%v", err)
+					return handleErr(err)
 				}
 				return printSample(cmd, res, format)
 			case tailN > 0:
 				if !forceStream {
 					if err := inspect.RefuseCompressedCloudSample(cmd.Context(), args[0], inspect.SampleTail, tailN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject}); err != nil {
-						return withExitCode(exitOperational, "%v", err)
+						return handleErr(err)
 					}
 				}
 				res, err := inspect.Tail(cmd.Context(), args[0], tailN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
 				if err != nil {
-					return withExitCode(exitOperational, "%v", err)
+					return handleErr(err)
 				}
 				return printSample(cmd, res, format)
 			case detectFlag:
 				res, err := inspect.Detect(cmd.Context(), args[0], sampleBytes, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
 				if err != nil {
-					return withExitCode(exitOperational, "%v", err)
+					return handleErr(err)
 				}
 				return printDetect(cmd, res, format)
 			default:
-				return withExitCode(exitOperational, "inspect requires one of --wc, --head, --mid, --tail, or --detect")
+				return withExitCode(exitBadURI, "inspect requires one of --wc, --head, --mid, --tail, or --detect")
 			}
 		},
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -12,6 +13,18 @@ import (
 )
 
 const storageScope = "https://storage.azure.com/.default"
+
+type AuthDetails struct {
+	TokenExpiry time.Time
+}
+
+var getAzureAccessToken = func(ctx context.Context, profile string) (azcore.AccessToken, error) {
+	cred, err := newCredential(profile)
+	if err != nil {
+		return azcore.AccessToken{}, err
+	}
+	return cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{storageScope}})
+}
 
 func applyAZProfile(profile string) error {
 	if profile == "" {
@@ -56,11 +69,10 @@ func newCredential(profile string) (azcore.TokenCredential, error) {
 	return cred, nil
 }
 
-func ProbeAuth(ctx context.Context, profile string) error {
-	cred, err := newCredential(profile)
+func ProbeAuth(ctx context.Context, profile string) (*AuthDetails, error) {
+	token, err := getAzureAccessToken(ctx, profile)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{storageScope}})
-	return err
+	return &AuthDetails{TokenExpiry: token.ExpiresOn}, nil
 }

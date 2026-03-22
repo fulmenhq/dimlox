@@ -1,6 +1,7 @@
 package gcs
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDetectAuthSourceMissingCredentials(t *testing.T) {
@@ -137,6 +139,34 @@ func TestDescribeAuthSourceLocalADCIncludesQuotaProject(t *testing.T) {
 	want := "ADC via local ADC file (~/.config/gcloud/application_default_credentials.json), quota-project=local-quota"
 	if detail != want {
 		t.Fatalf("DescribeAuthSource() = %q, want %q", detail, want)
+	}
+}
+
+func TestProbeAuthIncludesTokenExpiry(t *testing.T) {
+	origProbe := probeGCSTokenExpiry
+	t.Cleanup(func() { probeGCSTokenExpiry = origProbe })
+
+	wantExpiry := time.Date(2026, 3, 22, 16, 45, 0, 0, time.UTC)
+	probeGCSTokenExpiry = func(context.Context) (time.Time, error) {
+		return wantExpiry, nil
+	}
+
+	root := t.TempDir()
+	file := filepath.Join(root, "service.json")
+	if err := os.WriteFile(file, []byte(`{"type":"service_account","quota_project_id":"svc-quota"}`), 0o644); err != nil {
+		t.Fatalf("write service file: %v", err)
+	}
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", file)
+
+	details, err := ProbeAuth(context.Background())
+	if err != nil {
+		t.Fatalf("ProbeAuth() error = %v", err)
+	}
+	if details == nil || details.Source != AuthSourceEnvVar {
+		t.Fatalf("ProbeAuth() source = %v, want %v", details.Source, AuthSourceEnvVar)
+	}
+	if !details.TokenExpiry.Equal(wantExpiry) {
+		t.Fatalf("ProbeAuth() expiry = %v, want %v", details.TokenExpiry, wantExpiry)
 	}
 }
 

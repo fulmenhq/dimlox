@@ -25,6 +25,7 @@ type AuthDetails struct {
 	Source       AuthSource
 	Path         string
 	QuotaProject string
+	TokenExpiry  time.Time
 }
 
 type AuthSource string
@@ -35,17 +36,29 @@ const (
 	AuthSourceMetadata AuthSource = "metadata server"
 )
 
-func ProbeAuth(ctx context.Context) error {
-	_, err := detectAuthDetails(http.DefaultClient)
-	if err != nil {
-		return err
-	}
+var probeGCSTokenExpiry = func(ctx context.Context) (time.Time, error) {
 	creds, err := google.FindDefaultCredentials(ctx, storageapi.ScopeReadOnly)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
-	_, err = creds.TokenSource.Token()
-	return err
+	token, err := creds.TokenSource.Token()
+	if err != nil {
+		return time.Time{}, err
+	}
+	return token.Expiry, nil
+}
+
+func ProbeAuth(ctx context.Context) (*AuthDetails, error) {
+	details, err := detectAuthDetails(http.DefaultClient)
+	if err != nil {
+		return nil, err
+	}
+	expiry, err := probeGCSTokenExpiry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	details.TokenExpiry = expiry
+	return details, nil
 }
 
 func DescribeAuthSource() (string, error) {

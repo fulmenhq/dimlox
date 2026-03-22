@@ -15,6 +15,7 @@ and split problems now while preserving interfaces for a later Rust rewrite.
 | Delivery Lead | `deliverylead` | governance | Sprint coordination, timeline orchestration |
 | Enterprise Architect | `entarch` | governance | Cross-system architecture, ecosystem parity |
 | Information Architect | `infoarch` | agentic | Documentation, schema governance, standards |
+| Product Marketing | `prodmktg` | agentic | Product positioning, devrel, adoption support |
 
 ## Notes
 
@@ -22,6 +23,8 @@ and split problems now while preserving interfaces for a later Rust rewrite.
   `echoworks-mullet-transfer` shared role catalog.
 - `entarch` was added here as a companion strategic architecture role because the
   source catalog references it but does not currently include a concrete role file.
+- `prodmktg` was added from the `echoworks-mullet-transfer` shared catalog and tuned
+  for dimlox's technical audience (dev/devops, data engineering, QA).
 - The roles here are tuned to the current dimlox plan: Phase 0 scaffold, then
   provider work, transfer, inspect, and split.
 - `deliverylead` is the current coordination role for local AGENTS file shaping
@@ -37,3 +40,4 @@ and split problems now while preserving interfaces for a later Rust rewrite.
 | Architecture or contract durability | `entarch` | `devlead` |
 | Test strategy or phase-gate validation | `qa` | `devrev` |
 | Session sequencing and AGENTS coordination | `deliverylead` | `entarch` |
+| Product positioning and adoption content | `prodmktg` | `infoarch` |

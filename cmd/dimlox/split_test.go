@@ -84,3 +84,24 @@ func TestSplitCommandDryRunCompressedShowsGuidance(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }
+
+func TestSplitCommandRequiresExplicitLimit(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "sample.psv")
+	if err := os.WriteFile(src, []byte("c1|c2\n1|2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cmd := rootCmd()
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	cmd.SetArgs([]string{"split", src})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want explicit-limit failure")
+	}
+	if !strings.Contains(err.Error(), "split requires --rows > 0 or --bytes > 0") {
+		t.Fatalf("error = %v, want explicit-limit message", err)
+	}
+}

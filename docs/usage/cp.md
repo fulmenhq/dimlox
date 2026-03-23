@@ -56,6 +56,28 @@ dimlox cp --verify --landing "/tmp/dimlox" \
   "azblob://exampleaccount/example-container/data/orders.psv"
 ```
 
+### Copy between cloud providers through the landing area
+
+Use this when you need a simple cross-provider transfer and want `dimlox` to
+handle the local staging step for you:
+
+```bash
+dimlox cp --verify --landing "$HOME/work/dimlox" \
+  "azblob://exampleaccount/example-container/data/product_20230923.psv" \
+  "gs://example-bucket/data/product_20230923.psv"
+```
+
+What to expect:
+
+- `cp` downloads the source object into the landing directory first
+- `cp` then uploads that staged file to the destination provider
+- the landing file is removed automatically on success unless `--keep-landing` is set
+- progress is reported separately for the `get` and `put` legs
+- `--verify` checks the download leg before the upload starts
+
+This is the normal cross-cloud path today. It is intentionally a local
+staging flow, not a direct provider-to-provider stream.
+
 ### Keep the landing file for a later retry or inspection
 
 ```bash

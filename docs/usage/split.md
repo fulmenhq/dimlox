@@ -24,7 +24,7 @@ dimlox split <uri>
 |---|---|---|---|
 | `--mode` | `auto` | Choose `auto`, `stream`, `range`, or `binary` splitting | `dimlox split --mode range --rows 1000000 "gs://example-bucket/data/orders.psv"` |
 | `--rows` | `0` | Set the maximum data rows per shard for text modes | `dimlox split --rows 5000000 "/tmp/orders.psv.gz"` |
-| `--bytes` | `500` | Set the maximum shard size in MiB | `dimlox split --bytes 256 --mode binary "/tmp/archive.bin"` |
+| `--bytes` | `0` | Set the maximum shard size in MiB | `dimlox split --bytes 256 --mode binary "/tmp/archive.bin"` |
 | `--out-dir` | `""` | Choose where shard files are written | `dimlox split --out-dir "/tmp/shards" "/tmp/orders.psv.gz"` |
 | `--out-fmt` | `match` | Choose `match`, `text`, or `gz` output format | `dimlox split --out-fmt gz "/tmp/orders.psv"` |
 | `--header` | `false` | Copy the first line into every text shard | `dimlox split --rows 5000000 --header "/tmp/orders.psv"` |
@@ -176,6 +176,7 @@ Dry run behavior:
 - prints one JSON object per planned shard
 - exits `0` on success
 - writes no shard files and no manifest file
+- requires at least one explicit shard limit via `--rows` or `--bytes`
 
 For compressed text output, dry-run reports `logical_bytes` instead of pretending
 it knows the final `.gz` shard size. Final compressed bytes depend on data
@@ -215,11 +216,15 @@ What to expect:
 - `split` chooses `stream` mode for compressed text sources
 - the source is forward-streamed and decompressed as it is read
 - shard files are written incrementally; the full uncompressed payload is not held in memory
+- you avoid needing extra local storage for a second full-size uncompressed staging file
+- output shards can stay compressed, which is often easier to archive, move, or hand off downstream
 - `--header` copies the first row into each shard
 - `--manifest` records shard lineage and split settings for downstream use
 
 This is the normal path when you download a large `.psv.gz` or `.csv.gz` file
-from cloud storage and want to shard it directly.
+from cloud storage and want to shard it directly. The main benefit is storage
+efficiency and operational simplicity, not avoiding decompression or
+recompression work during the split itself.
 
 ### Split a remote uncompressed text file with range mode
 

@@ -16,6 +16,18 @@ dimlox doctor
   object, prefix, bucket, container, or local file
 - reports Azure and GCS token validity windows without printing token values
 
+## Probe scope
+
+`doctor` narrows its probe set when provider intent is explicit:
+
+- `dimlox doctor` checks `local`, `azblob`, and `gcs`
+- `dimlox doctor --az-profile ...` checks `local` and `azblob`
+- `dimlox doctor --gcp-project ...` checks `local` and `gcs`
+- `dimlox doctor <uri>` checks the target provider only
+
+This keeps provider-specific setup flows focused instead of surfacing unrelated
+auth failures.
+
 ## Usage
 
 ```bash
@@ -95,7 +107,7 @@ dimlox doctor "/tmp/orders.psv.gz"
 ## Troubleshooting
 
 - Azure says `Please run 'az login'`
-  - log in to the selected Azure CLI profile, then rerun `doctor`
+  - if you are using `--az-profile`, set `AZURE_CONFIG_DIR` to that profile directory first, then run `az login`
 - GCS says ADC is missing
   - run `gcloud auth application-default login` or point `GOOGLE_APPLICATION_CREDENTIALS` at an approved credentials file
 - Targeted doctor returns `BlobNotFound` or object-not-found

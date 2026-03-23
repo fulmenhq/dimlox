@@ -194,6 +194,27 @@ This keeps partially written outputs easy to spot and avoids corrupt final shard
 dimlox split --rows 5000000 --header --manifest --out-dir "/tmp/shards" "/tmp/orders.psv.gz"
 ```
 
+### Split a compressed file without unpacking it first
+
+Use this when the source is already gzip-compressed and you want text shards
+without creating a separate uncompressed working copy first:
+
+```bash
+dimlox split --rows 5000000 --header --manifest --out-dir "$HOME/work/shards" \
+  "$HOME/work/price_20240824.psv.gz"
+```
+
+What to expect:
+
+- `split` chooses `stream` mode for compressed text sources
+- the source is forward-streamed and decompressed as it is read
+- shard files are written incrementally; the full uncompressed payload is not held in memory
+- `--header` copies the first row into each shard
+- `--manifest` records shard lineage and split settings for downstream use
+
+This is the normal path when you download a large `.psv.gz` or `.csv.gz` file
+from cloud storage and want to shard it directly.
+
 ### Split a remote uncompressed text file with range mode
 
 ```bash

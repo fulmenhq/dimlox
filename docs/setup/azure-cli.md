@@ -115,6 +115,23 @@ dimlox doctor --az-profile e3-filemage
 dimlox ls --az-profile e3-filemage azblob://<account>/<container>/
 ```
 
+If `dimlox doctor --az-profile e3-filemage` says the profile is not logged in,
+run the login again against that exact profile directory:
+
+**Windows (PowerShell):**
+
+```powershell
+$env:AZURE_CONFIG_DIR = "$env:USERPROFILE\.azure-profiles\e3-filemage"
+az login
+```
+
+**Linux / macOS:**
+
+```bash
+export AZURE_CONFIG_DIR="$HOME/.azure-profiles/e3-filemage"
+az login
+```
+
 ### Switching profiles
 
 To switch, just set `AZURE_CONFIG_DIR` again in your current shell. Some teams

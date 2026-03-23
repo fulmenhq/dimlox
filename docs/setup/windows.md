@@ -33,6 +33,10 @@ make install-path
 `make install-path` adds that directory to the user PATH for developer shells.
 Open a new terminal after running it.
 
+This `make install` + `make install-path` flow is intended for local developer
+setup. Long-term end-user installation on Windows is expected to go through
+Scoop rather than Make targets.
+
 Verify:
 
 ```powershell

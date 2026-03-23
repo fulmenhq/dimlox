@@ -1,5 +1,6 @@
 param(
-    [string]$RaceFlag = ""
+    [string]$RaceFlag = "",
+    [switch]$Short
 )
 
 $ErrorActionPreference = "Continue"
@@ -93,6 +94,9 @@ function Test-KnownExecLock {
 }
 
 $goTestArgs = @("test", "-v")
+if ($Short) {
+    $goTestArgs += "-short"
+}
 if (-not $RaceFlag) {
     $raceProbeOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot/race-probe-windows.ps1" -Quiet
     if ($null -ne $raceProbeOutput) {

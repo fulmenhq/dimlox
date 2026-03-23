@@ -1,0 +1,215 @@
+# yamllint disable rule:document-start
+# yamllint disable rule:truthy
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/fulmenhq/goneat-tools-runner:v0.3.3
+      options: --user 1001
+    env:
+      FULMEN_WORKSPACE_ROOT: ${{ github.workspace }}
+      CGO_ENABLED: "0"
+      GOPATH: ${{ github.workspace }}/../_go
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Prepare Go directories
+        run: mkdir -p "$GOPATH/bin" "$GOPATH/pkg"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Verify toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          prettier --version
+          yamlfmt --version
+          sfetch --version
+          goneat --version
+          command -v go
+          go version
+          go env GOPATH
+          go mod download
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          make fmt
+          git diff --exit-code
+
+      - name: Run go vet
+        shell: bash
+        run: |
+          set -euo pipefail
+          go vet ./...
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.4.0
+          args: --help
+
+      - name: Verify golangci-lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          golangci-lint --version
+
+      - name: Lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          make lint
+
+      - name: Test (short)
+        shell: bash
+        run: |
+          set -euo pipefail
+          make test-short
+
+      - name: Build binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          make build
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./bin/dimlox_linux_amd64 version
+          ./bin/dimlox_linux_amd64 --help
+
+  race:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Verify race prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v cc
+          command -v gcc
+          cc --version
+          gcc --version
+          go env CGO_ENABLED CC CXX
+          go mod download
+
+      - name: Test with race detector
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -race -short ./...
+
+  cross-build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/fulmenhq/goneat-tools-runner:v0.3.3
+      options: --user 1001
+    env:
+      FULMEN_WORKSPACE_ROOT: ${{ github.workspace }}
+      CGO_ENABLED: "0"
+      GOPATH: ${{ github.workspace }}/../_go
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Prepare Go directories
+        run: mkdir -p "$GOPATH/bin" "$GOPATH/pkg"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Verify toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          sfetch --version
+          goneat --version
+          go version
+          go mod download
+
+      - name: Cross-build all targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          make build-all
+
+  native-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest-arm64-s
+            os: linux
+          - runner: windows-latest-arm64-s
+            os: windows
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Native smoke (Linux arm64)
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          go env GOOS GOARCH
+          make build
+          make test-short
+          ./bin/dimlox_linux_arm64 version
+          ./bin/dimlox_linux_arm64 --help
+
+      - name: Native smoke (Windows arm64)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          go env GOOS GOARCH
+          make build
+          make test-short
+          .\bin\dimlox_windows_arm64.exe version
+          .\bin\dimlox_windows_arm64.exe --help

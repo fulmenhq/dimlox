@@ -55,6 +55,10 @@ BUILD_ARTIFACT  := bin/$(NAME)_$(GOOS)_$(GOARCH)$(EXT)
 
 # Repo-local tool bin
 BIN_DIR := $(CURDIR)/bin
+DIST_RELEASE ?= dist/release
+RELEASE_TAG ?= $(or $(DIMLOX_RELEASE_TAG),$(VERSION))
+SIGNING_ENV_PREFIX ?= DIMLOX
+SIGNING_APP_NAME ?= $(NAME)
 
 # Pinned tool versions (existing installs at or above are kept as-is)
 SFETCH_VERSION  ?= v0.4.5
@@ -69,10 +73,13 @@ SFETCH  = $(shell [ -x "$(BIN_DIR)/sfetch" ]  && echo "$(BIN_DIR)/sfetch"  || co
 GONEAT  = $(shell [ -x "$(BIN_DIR)/goneat" ]  && echo "$(BIN_DIR)/goneat"  || command -v goneat  2>/dev/null)
 endif
 
-.PHONY: all help build build-all build-windows test check fmt vet lint assess \
+.PHONY: all help build build-all build-windows test test-short check fmt vet lint assess \
         install install-path clean version version-check version-set \
         version-patch version-minor version-major \
-        precommit prepush bootstrap tools
+        precommit prepush bootstrap tools \
+        release-clean release-build release-checksums release-sign release-download \
+        release-export-keys release-verify-keys release-verify-checksums release-notes \
+        release-upload release-upload-provenance release-upload-all
 
 all: build
 
@@ -161,6 +168,13 @@ ifeq ($(WINDOWS_HOST),Windows_NT)
 	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/test-windows.ps1
 else
 	go test -v $(RACE_FLAG) ./...
+endif
+
+test-short: ## Run tests without live network (CI-safe)
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/test-windows.ps1 -Short
+else
+	go test -v -short ./...
 endif
 
 check: fmt vet test ## fmt + vet + test (full local quality gate)
@@ -314,6 +328,92 @@ else
 	rm -rf bin/ dist/ coverage.out
 	go clean -cache
 	@echo "[ok] Cleaned"
+endif
+
+# -----------------------------------------------------------------------------
+# Release
+# -----------------------------------------------------------------------------
+
+release-clean: ## Remove staged release artifacts
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Release helper targets are not supported on Windows hosts; use macOS or Linux for release staging."; exit 1
+else
+	rm -rf "$(DIST_RELEASE)"
+	mkdir -p "$(DIST_RELEASE)"
+	@echo "[ok] Cleaned $(DIST_RELEASE)"
+endif
+
+release-build: release-clean build-all release-checksums ## Build release artifacts into dist/release
+	@echo "[ok] Release artifacts staged in $(DIST_RELEASE)"
+
+release-checksums: ## Generate checksum manifests in dist/release
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Release helper targets are not supported on Windows hosts; use macOS or Linux for release staging."; exit 1
+else
+	./scripts/generate-checksums.sh "$(DIST_RELEASE)" "$(NAME)"
+endif
+
+release-download: ## Download GitHub release assets for RELEASE_TAG
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Release helper targets are not supported on Windows hosts; use macOS or Linux for release staging."; exit 1
+else
+	./scripts/release-download.sh "$(RELEASE_TAG)" "$(DIST_RELEASE)"
+endif
+
+release-sign: ## Sign checksum manifests (minisign required; PGP optional)
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Release helper targets are not supported on Windows hosts; use macOS or Linux for release staging."; exit 1
+else
+	SIGNING_ENV_PREFIX="$(SIGNING_ENV_PREFIX)" SIGNING_APP_NAME="$(SIGNING_APP_NAME)" ./scripts/sign-release-manifests.sh "$(RELEASE_TAG)" "$(DIST_RELEASE)"
+endif
+
+release-export-keys: ## Export public signing keys into dist/release
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Release helper targets are not supported on Windows hosts; use macOS or Linux for release staging."; exit 1
+else
+	SIGNING_ENV_PREFIX="$(SIGNING_ENV_PREFIX)" SIGNING_APP_NAME="$(SIGNING_APP_NAME)" ./scripts/export-release-keys.sh "$(DIST_RELEASE)"
+endif
+
+release-verify-keys: ## Verify exported public keys are public-only
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Release helper targets are not supported on Windows hosts; use macOS or Linux for release staging."; exit 1
+else
+	@if [ -f "$(DIST_RELEASE)/$(NAME)-minisign.pub" ]; then ./scripts/verify-minisign-public-key.sh "$(DIST_RELEASE)/$(NAME)-minisign.pub"; else echo "[--] No minisign public key found (skipping)"; fi
+	@if [ -f "$(DIST_RELEASE)/fulmenhq-release-signing-key.asc" ]; then ./scripts/verify-public-key.sh "$(DIST_RELEASE)/fulmenhq-release-signing-key.asc"; else echo "[--] No PGP public key found (skipping)"; fi
+endif
+
+release-verify-checksums: ## Verify SHA256SUMS and SHA512SUMS against artifacts
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Release helper targets are not supported on Windows hosts; use macOS or Linux for release staging."; exit 1
+else
+	./scripts/verify-checksums.sh "$(DIST_RELEASE)"
+endif
+
+release-notes: ## Copy docs/releases/RELEASE_TAG.md into dist/release
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Release helper targets are not supported on Windows hosts; use macOS or Linux for release staging."; exit 1
+else
+	@notes_src="docs/releases/$(RELEASE_TAG).md"; notes_dst="$(DIST_RELEASE)/release-notes-$(RELEASE_TAG).md"; \
+	if [ ! -f "$$notes_src" ]; then echo "[!!] Missing $$notes_src"; exit 1; fi; \
+	mkdir -p "$(DIST_RELEASE)"; \
+	cp "$$notes_src" "$$notes_dst"; echo "[ok] Copied $$notes_src -> $$notes_dst"
+endif
+
+release-upload: release-upload-provenance ## Upload provenance assets to GitHub release
+	@:
+
+release-upload-provenance: release-verify-checksums release-verify-keys ## Upload manifests, signatures, keys, and notes
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Release helper targets are not supported on Windows hosts; use macOS or Linux for release staging."; exit 1
+else
+	./scripts/release-upload-provenance.sh "$(RELEASE_TAG)" "$(DIST_RELEASE)"
+endif
+
+release-upload-all: release-verify-checksums release-verify-keys ## Upload binaries and provenance assets to GitHub release
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Release helper targets are not supported on Windows hosts; use macOS or Linux for release staging."; exit 1
+else
+	./scripts/release-upload.sh "$(RELEASE_TAG)" "$(DIST_RELEASE)"
 endif
 
 # -----------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 # dimlox
 
+[![CI](https://github.com/fulmenhq/dimlox/actions/workflows/ci.yml/badge.svg)](https://github.com/fulmenhq/dimlox/actions/workflows/ci.yml)
+
 `dimlox` moves, inspects, and splits large files across Azure Blob Storage,
 Google Cloud Storage, and local filesystems without loading whole files into
 memory.
@@ -143,6 +145,10 @@ Full assess (format, lint, security — requires goneat):
 make assess
 ```
 
+CI runs `make fmt`, `go vet ./...`, `make lint`, `make test-short`, and
+`make build` on pull requests and pushes to `main`. A separate Linux race job
+is advisory and runs with `CGO_ENABLED=1`.
+
 ## Install
 
 ```bash
@@ -215,6 +221,14 @@ make version-minor   # v0.1.0 → v0.2.0
 make version-major   # v0.1.0 → v1.0.0
 make version-set V=v0.2.0
 ```
+
+Release automation is split between GitHub Actions and local signing:
+
+- CI builds draft releases for `v*` tags
+- checksum signing and provenance upload stay local
+- use `DIMLOX_RELEASE_TAG=vX.Y.Z` for local release helper targets
+
+Maintainer release steps are documented in `RELEASE_CHECKLIST.md`.
 
 ## Development
 

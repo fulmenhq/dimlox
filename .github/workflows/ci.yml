@@ -114,10 +114,15 @@ jobs:
         with:
           go-version: "1.25.x"
 
-      - name: Download modules
+      - name: Verify race prerequisites
         shell: bash
         run: |
           set -euo pipefail
+          command -v cc
+          command -v gcc
+          cc --version
+          gcc --version
+          go env CGO_ENABLED CC CXX
           go mod download
 
       - name: Test with race detector

@@ -93,8 +93,17 @@ function Test-KnownExecLock {
 }
 
 $goTestArgs = @("test", "-v")
+if (-not $RaceFlag) {
+    $raceProbeOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot/race-probe-windows.ps1" -Quiet
+    if ($null -ne $raceProbeOutput) {
+        $RaceFlag = ($raceProbeOutput | Out-String).Trim()
+    }
+}
 if ($RaceFlag) {
+    Write-Host "[..] Windows race mode enabled"
     $goTestArgs += $RaceFlag
+} else {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot/race-probe-windows.ps1"
 }
 $goTestArgs += "./..."
 

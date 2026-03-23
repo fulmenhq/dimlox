@@ -7,7 +7,7 @@ separately — this page focuses on installation and Windows-specific details.
 ## Prerequisites
 
 - Windows 10 (1809+) or Windows 11
-- Go 1.23+ ([download](https://go.dev/dl/) or `scoop install go`)
+- Go 1.25+ ([download](https://go.dev/dl/) or `scoop install go`)
 - Git ([download](https://git-scm.com/download/win), `winget install Git.Git`, or `scoop install git`)
 - GNU make (`winget install -e --id GnuWin32.Make` or `scoop install make`)
 

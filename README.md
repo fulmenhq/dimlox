@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/fulmenhq/dimlox/actions/workflows/ci.yml/badge.svg)](https://github.com/fulmenhq/dimlox/actions/workflows/ci.yml)
 
+Moving and shaping structured data across the clouds.
+
 `dimlox` moves, inspects, and splits large files across Azure Blob Storage,
 Google Cloud Storage, and local filesystems without loading whole files into
 memory.
@@ -111,7 +113,7 @@ relative/local/path
 
 ## Prerequisites
 
-- Go 1.23+
+- Go 1.25+
 - Azure CLI (`az`) with an active login for AZS operations
 - `gcloud` with Application Default Credentials for GCS operations
 
@@ -146,8 +148,9 @@ make assess
 ```
 
 CI runs `make fmt`, `go vet ./...`, `make lint`, `make test-short`, and
-`make build` on pull requests and pushes to `main`. A separate Linux race job
-is advisory and runs with `CGO_ENABLED=1`.
+`make build` on pull requests and pushes to `main`. Separate jobs cover Linux
+race testing with `CGO_ENABLED=1`, cross-builds, and native smoke checks on
+Linux and Windows arm64 runners.
 
 ## Install
 
@@ -166,7 +169,7 @@ through Scoop rather than `make install`.
 
 ## Windows status
 
-Windows is part of the active support target for `v0.1.0`.
+Windows is a supported target for local workflows and release builds.
 
 - cross-compiles are expected to pass for Windows amd64 and arm64
 - local file I/O uses OS-native paths, but manifest shard paths remain portable forward slashes
@@ -174,16 +177,14 @@ Windows is part of the active support target for `v0.1.0`.
 
 Known limitations:
 
-- maintainer validation on a real Windows host is still the final runtime check for this phase
+- native smoke now runs in CI, but maintainer validation on a real Windows workstation is still useful before release
 - legacy Windows consoles may fall back to plain progress output; non-TTY runs still emit structured JSON Lines progress on `stderr`
 
 ## Authentication
 
-**Azure Blob Storage** — uses `DefaultAzureCredential`. Activate the right CLI profile first:
-
-```bash
-az-profile client-a   # or whatever alias sets AZURE_CONFIG_DIR
-```
+**Azure Blob Storage** — uses `DefaultAzureCredential`. If you use named Azure
+CLI profiles, select the right `AZURE_CONFIG_DIR` in your shell and pass
+`--az-profile <name>` to `dimlox`.
 
 Setup guide: `docs/setup/azure-cli.md`
 
@@ -216,10 +217,10 @@ dimlox version
 Version is embedded at build time via `-ldflags`. The `VERSION` file at the repo root is the single source of truth (format: `vX.Y.Z`).
 
 ```bash
-make version-patch   # v0.1.0 → v0.1.1
-make version-minor   # v0.1.0 → v0.2.0
-make version-major   # v0.1.0 → v1.0.0
-make version-set V=v0.2.0
+make version-patch
+make version-minor
+make version-major
+make version-set V=vX.Y.Z
 ```
 
 Release automation is split between GitHub Actions and local signing:

@@ -213,20 +213,20 @@ func formatAzureProfileGuidance(profile string, resolution *providerazblob.Profi
 	b.WriteString("  To create this profile:\n\n")
 	if runtime.GOOS == "windows" {
 		fmt.Fprintf(&b, "    # Windows (PowerShell)\n")
-		fmt.Fprintf(&b, "    $env:AZURE_CONFIG_DIR = \"$env:USERPROFILE\\.azure-profiles\\%s\"\n", profile)
+		fmt.Fprintf(&b, "    $env:AZURE_CONFIG_DIR = \"%s\"\n", windowsCommandPath(profile, resolution))
 		b.WriteString("    New-Item -ItemType Directory -Force -Path $env:AZURE_CONFIG_DIR\n")
 		b.WriteString("    az login\n\n")
 		fmt.Fprintf(&b, "    # Linux / macOS\n")
-		fmt.Fprintf(&b, "    export AZURE_CONFIG_DIR=\"$HOME/.azure-profiles/%s\"\n", profile)
+		fmt.Fprintf(&b, "    export AZURE_CONFIG_DIR=\"%s\"\n", posixCommandPath(profile, resolution))
 		b.WriteString("    mkdir -p \"$AZURE_CONFIG_DIR\"\n")
 		b.WriteString("    az login\n\n")
 	} else {
 		fmt.Fprintf(&b, "    # Linux / macOS\n")
-		fmt.Fprintf(&b, "    export AZURE_CONFIG_DIR=\"$HOME/.azure-profiles/%s\"\n", profile)
+		fmt.Fprintf(&b, "    export AZURE_CONFIG_DIR=\"%s\"\n", posixCommandPath(profile, resolution))
 		b.WriteString("    mkdir -p \"$AZURE_CONFIG_DIR\"\n")
 		b.WriteString("    az login\n\n")
 		fmt.Fprintf(&b, "    # Windows (PowerShell)\n")
-		fmt.Fprintf(&b, "    $env:AZURE_CONFIG_DIR = \"$env:USERPROFILE\\.azure-profiles\\%s\"\n", profile)
+		fmt.Fprintf(&b, "    $env:AZURE_CONFIG_DIR = \"%s\"\n", windowsCommandPath(profile, resolution))
 		b.WriteString("    New-Item -ItemType Directory -Force -Path $env:AZURE_CONFIG_DIR\n")
 		b.WriteString("    az login\n\n")
 	}
@@ -241,6 +241,13 @@ func formatAzureLoginGuidance(profile string, resolution *providerazblob.Profile
 		fmt.Fprintf(&b, " (az-profile=%s)", profile)
 	}
 	b.WriteString("\n\n")
+	if profile == "" {
+		b.WriteString("  Run this in your shell:\n\n")
+		b.WriteString("    az login\n\n")
+		b.WriteString("  If you normally use a non-default Azure CLI config directory, set AZURE_CONFIG_DIR to that directory before running az login.\n\n")
+		b.WriteString("  Then retry: dimlox doctor")
+		return b.String()
+	}
 	b.WriteString("  Run this in your shell to select the same profile directory:\n\n")
 	if runtime.GOOS == "windows" {
 		fmt.Fprintf(&b, "    $env:AZURE_CONFIG_DIR = \"%s\"\n", windowsCommandPath(profile, resolution))
@@ -249,11 +256,7 @@ func formatAzureLoginGuidance(profile string, resolution *providerazblob.Profile
 		fmt.Fprintf(&b, "    export AZURE_CONFIG_DIR=\"%s\"\n", posixCommandPath(profile, resolution))
 		b.WriteString("    az login\n\n")
 	}
-	if profile != "" {
-		fmt.Fprintf(&b, "  Then retry: dimlox doctor --az-profile %s", profile)
-	} else {
-		b.WriteString("  Then retry: dimlox doctor")
-	}
+	fmt.Fprintf(&b, "  Then retry: dimlox doctor --az-profile %s", profile)
 	return b.String()
 }
 

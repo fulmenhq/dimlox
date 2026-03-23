@@ -130,6 +130,32 @@ func TestProbeAzureReturnsSetupGuidanceWhenProfileMissing(t *testing.T) {
 	}
 }
 
+func TestProbeAzureReturnsSetupGuidanceUsingResolvedProfileDir(t *testing.T) {
+	origResolve := resolveAzureProfile
+	t.Cleanup(func() {
+		resolveAzureProfile = origResolve
+	})
+
+	resolveAzureProfile = func(string) (*providerazblob.ProfileResolution, error) {
+		return &providerazblob.ProfileResolution{
+			Candidates: []string{"/custom/profiles/client-a"},
+			Resolved:   "/custom/profiles/client-a",
+			Exists:     false,
+		}, nil
+	}
+
+	status := probeAzure(context.Background(), "client-a")
+	if status.OK {
+		t.Fatalf("status.OK = true, want false")
+	}
+	if !strings.Contains(status.Detail, "export AZURE_CONFIG_DIR=\"/custom/profiles/client-a\"") {
+		t.Fatalf("detail = %q, want resolved profile directory guidance", status.Detail)
+	}
+	if strings.Contains(status.Detail, ".azure-profiles/client-a") {
+		t.Fatalf("detail = %q, do not want hardcoded default profile path", status.Detail)
+	}
+}
+
 func TestProbeAzureReturnsLoginGuidanceWhenCLIProfileNotLoggedIn(t *testing.T) {
 	origResolve := resolveAzureProfile
 	origProbe := probeAzureAuth
@@ -164,6 +190,31 @@ func TestProbeAzureReturnsLoginGuidanceWhenCLIProfileNotLoggedIn(t *testing.T) {
 	}
 	if !strings.Contains(status.Detail, "az login") {
 		t.Fatalf("detail = %q, want az login guidance", status.Detail)
+	}
+}
+
+func TestProbeAzureReturnsDefaultLoginGuidanceWithoutProfilePath(t *testing.T) {
+	origProbe := probeAzureAuth
+	t.Cleanup(func() {
+		probeAzureAuth = origProbe
+	})
+
+	probeAzureAuth = func(context.Context, string) (*providerazblob.AuthDetails, error) {
+		return nil, errors.New("DefaultAzureCredential: failed to acquire a token. AzureCLICredential: ERROR: Please run 'az login' to setup account.")
+	}
+
+	status := probeAzure(context.Background(), "")
+	if status.OK {
+		t.Fatalf("status.OK = true, want false")
+	}
+	if !strings.Contains(status.Detail, "Then retry: dimlox doctor") {
+		t.Fatalf("detail = %q, want default retry hint", status.Detail)
+	}
+	if strings.Contains(status.Detail, ".azure-profiles") {
+		t.Fatalf("detail = %q, do not want profile-directory guidance for default Azure CLI login", status.Detail)
+	}
+	if strings.Contains(status.Detail, "--az-profile") {
+		t.Fatalf("detail = %q, do not want az-profile retry guidance", status.Detail)
 	}
 }
 

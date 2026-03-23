@@ -46,7 +46,7 @@ function Test-ExplicitTestFailure {
     )
 
     foreach ($line in $Lines) {
-        if ($line -match '^--- FAIL:' -or $line -match '^panic:') {
+        if ($line -match '^--- FAIL:' -or $line -match '^panic:' -or $line -match '^FAIL\s+.+\[(build|setup) failed\]') {
             return $true
         }
     }

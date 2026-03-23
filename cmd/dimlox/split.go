@@ -61,7 +61,7 @@ func splitCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&mode, "mode", string(split.ModeAuto), "split mode: auto, stream, range, or binary")
 	cmd.Flags().Int64Var(&rows, "rows", 0, "max data rows per shard for text modes")
-	cmd.Flags().Int64Var(&bytesLimit, "bytes", 500, "max MiB per shard")
+	cmd.Flags().Int64Var(&bytesLimit, "bytes", 0, "max MiB per shard")
 	cmd.Flags().StringVar(&outDir, "out-dir", "", "output directory for shard files")
 	cmd.Flags().StringVar(&outFmt, "out-fmt", "match", "output format: match, text, or gz")
 	cmd.Flags().BoolVar(&header, "header", false, "copy the first line to every text shard")
@@ -93,6 +93,9 @@ func printSplit(cmd *cobra.Command, res *split.Result) error {
 	}
 	if res.ManifestPath != "" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "manifest: %s\n", res.ManifestPath)
+	}
+	for _, note := range res.Notes {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "note: %s\n", note)
 	}
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "shards: %d\n", len(res.Shards))
 	for _, shard := range res.Shards {

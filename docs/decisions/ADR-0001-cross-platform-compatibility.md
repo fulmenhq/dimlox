@@ -41,6 +41,43 @@ must have a corresponding implementation or stub for all primary targets.
 No `_linux.go` file without a `_windows.go` and `_darwin.go` counterpart
 where the behaviour differs.
 
+### 1a. Developer tooling contract
+
+Windows support includes the developer workflow, not just the produced binary.
+Repository entry points such as `make build`, `make test`, `make precommit`,
+and `make bootstrap` must work when launched from:
+
+- PowerShell
+- `cmd.exe`
+- Git Bash / MSYS shells commonly used on Windows
+
+**Rules:**
+
+- Do not assume a POSIX shell when `OS=Windows_NT`.
+- Windows-specific command bodies should live in small PowerShell wrappers
+  instead of inline Bash fragments inside the `Makefile`.
+- Package bootstrap on Windows must be machine-actionable where supported:
+  installer commands in tooling config must run the installer, not just print
+  advisory text.
+- Bootstrap must exit non-zero when required tool installation or upgrade
+  fails. Partial success may be reported, but must not be indistinguishable
+  from a clean setup.
+
+### 1b. Race detector support
+
+Race-detector support on Windows depends on a working CGO toolchain in the
+active shell, not merely on toolchain binaries being installed somewhere on
+disk.
+
+**Rules:**
+
+- Windows `-race` enablement must be based on a probe that verifies the active
+  shell can successfully perform a tiny `go test -race` compile.
+- Do not gate `-race` solely on `CGO_ENABLED=1`, `gcc` presence, or Visual
+  Studio installation heuristics.
+- If the probe fails, test commands may continue without `-race`, but they
+  must print a short diagnostic explaining why it was disabled.
+
 ### 2. Path separators
 
 Two path domains exist in dimlox and must never be conflated:
@@ -139,13 +176,31 @@ Ctrl+C cleanup (removing `.part` files) must work on all platforms:
 - `DIMLOX_LANDING_DIR` must resolve correctly on all platforms. If unset,
   fall back to `os.TempDir()`, not a POSIX-specific path.
 - Install paths: `~/.local/bin/dimlox` on Linux/macOS,
-  `%APPDATA%\dimlox\bin\dimlox.exe` on Windows, as documented in README.
+  `%LOCALAPPDATA%\Programs\dimlox\bin\dimlox.exe` on Windows, as documented in README.
+
+### 7a. Tooling caches on Windows
+
+Windows-local antivirus scanning and file locking can make shared user cache
+directories unreliable for ephemeral build and lint artifacts.
+
+**Rules:**
+
+- Repository-managed commands on Windows should prefer repo-local cache and
+  temp directories under `.tmp/` for transient build and lint state where the
+  tool supports it.
+- This applies in particular to Go build/test scratch space (`GOCACHE`,
+  `GOTMPDIR`) and lint caches such as `GOLANGCI_LINT_CACHE`.
+- Repo-local cache paths should use forward slashes when passed through shell
+  wrappers, but filesystem operations must still use OS-native semantics.
+- Cache localisation is a reliability measure, not a reason to commit `.tmp/`
+  contents; all such directories remain disposable and gitignored.
 
 ## Consequences
 
 - All new code touching file paths, terminal output, signal handling, or
-  temp directories must follow this ADR. Code review (devrev) should check
-  compliance.
+  temp directories must follow this ADR. Windows-facing tooling changes
+  (Makefile targets, wrappers, bootstrap scripts, and tool config) are also in
+  scope. Code review (devrev) should check compliance.
 - Phase 6 implements these requirements against the existing codebase.
   Subsequent phases inherit them as standing constraints.
 - The `atomicRename` helper and path-length preflight become shared

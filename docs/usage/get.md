@@ -54,6 +54,28 @@ If `dst-path` is omitted, `dimlox` chooses a destination under `--landing`,
 dimlox get "azblob://exampleaccount/example-container/data/orders.psv.gz" "/tmp/orders.psv.gz"
 ```
 
+### Download a large cloud file with verification
+
+Use this when you want the simplest safe path from a cloud object to a local
+working file:
+
+```bash
+dimlox get --verify \
+  "gs://example-bucket/test/fileio/price_20240824.psv.gz" \
+  "$HOME/work/dimlox/price_20240824.psv.gz"
+```
+
+What to expect:
+
+- the file downloads to `price_20240824.psv.gz.part` first, then renames on success
+- `--verify` checks provider checksum metadata when available
+- progress writes to `stderr`
+- interactive terminals show a live progress line
+- piped or captured runs emit JSON Lines progress events instead
+
+This is a good first step before `inspect` or `split` when you want the cloud
+transfer to complete and verify before any downstream processing starts.
+
 ### Download into the landing area
 
 ```bash

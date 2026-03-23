@@ -14,19 +14,21 @@ import (
 )
 
 type ManifestEntry struct {
-	SourceURI    string `json:"source_uri"`
-	SourceETag   string `json:"source_etag,omitempty"`
-	SourceSize   int64  `json:"source_size"`
-	ShardIndex   int    `json:"shard_index"`
-	ShardFile    string `json:"shard_file"`
-	ShardRows    int64  `json:"shard_rows"`
-	ShardBytes   int64  `json:"shard_bytes"`
-	ShardMD5     string `json:"shard_md5,omitempty"`
-	SplitMode    Mode   `json:"split_mode"`
-	Delimiter    string `json:"delimiter,omitempty"`
-	Encoding     string `json:"encoding,omitempty"`
-	HeaderCopied bool   `json:"header_copied"`
-	CompletedAt  string `json:"completed_at"`
+	SourceURI      string `json:"source_uri"`
+	SourceETag     string `json:"source_etag,omitempty"`
+	SourceSize     int64  `json:"source_size"`
+	ShardIndex     int    `json:"shard_index"`
+	ShardFile      string `json:"shard_file"`
+	ShardRows      int64  `json:"shard_rows"`
+	ShardBytes     int64  `json:"shard_bytes,omitempty"`
+	LogicalBytes   int64  `json:"logical_bytes,omitempty"`
+	ShardBytesNote string `json:"shard_bytes_note,omitempty"`
+	ShardMD5       string `json:"shard_md5,omitempty"`
+	SplitMode      Mode   `json:"split_mode"`
+	Delimiter      string `json:"delimiter,omitempty"`
+	Encoding       string `json:"encoding,omitempty"`
+	HeaderCopied   bool   `json:"header_copied"`
+	CompletedAt    string `json:"completed_at"`
 }
 
 type manifestWriter struct {
@@ -106,12 +108,20 @@ func buildManifestEntry(rawURI string, meta *provider.ObjectMeta, outDir, shardP
 		ShardIndex:   index,
 		ShardFile:    filepath.ToSlash(filepath.Clean(relPath)),
 		ShardRows:    stats.rows,
-		ShardBytes:   stats.bytes,
 		SplitMode:    mode,
 		Delimiter:    delimiter,
 		Encoding:     encoding,
 		HeaderCopied: header,
 		CompletedAt:  time.Now().UTC().Format(time.RFC3339),
+	}
+	if stats.bytes > 0 {
+		entry.ShardBytes = stats.bytes
+	}
+	if stats.logicalBytes > 0 {
+		entry.LogicalBytes = stats.logicalBytes
+	}
+	if stats.bytesNote != "" {
+		entry.ShardBytesNote = stats.bytesNote
 	}
 	if meta != nil {
 		entry.SourceSize = meta.Size

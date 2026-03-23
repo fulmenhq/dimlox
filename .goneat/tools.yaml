@@ -16,6 +16,7 @@ scopes:
   foundation:
     description: Language-agnostic tools for formatting, linting, and shell scripts
     tools:
+      - make
       - ripgrep
       - jq
       - prettier
@@ -68,7 +69,7 @@ tools:
     description: Makefile linter
     kind: go
     detect_command: checkmake -v
-    install_package: github.com/mrtazz/checkmake/cmd/checkmake@latest
+    install_package: github.com/checkmake/checkmake/cmd/checkmake@latest
     version_args: [-v]
     check_args: [-h]
     installer_priority:
@@ -213,6 +214,25 @@ tools:
     minimum_version: 1.7.0
     recommended_version: 1.7.1
 
+  make:
+    name: make
+    description: Build runner used by dimlox development workflows
+    kind: system
+    detect_command: make --version
+    platforms: [windows]
+    installer_priority:
+      windows: [winget, scoop, manual]
+    install_commands:
+      winget: |
+        winget install -e --id GnuWin32.Make
+      scoop: |
+        scoop install make
+      manual: |
+        echo "Install GNU make, then reopen your terminal so 'make' is on PATH."
+    version_scheme: semver
+    minimum_version: 3.81.0
+    recommended_version: 3.81.0
+
   minisign:
     name: minisign
     description: Minimal signing utility for release artifacts
@@ -311,10 +331,11 @@ tools:
     installer_priority:
       darwin: [brew]
       linux: [manual]
-      windows: [scoop]
+      windows: [manual]
     install_commands:
       manual: |
-        echo "Run: sudo apt install yamllint"
+        echo "Linux:   sudo apt install yamllint"
+        echo "Windows: install uv, then run 'uv tool install yamllint'"
     version_scheme: semver
     minimum_version: 1.33.0
     recommended_version: 1.38.0

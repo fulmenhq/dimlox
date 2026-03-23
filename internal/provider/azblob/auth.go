@@ -18,6 +18,12 @@ type AuthDetails struct {
 	TokenExpiry time.Time
 }
 
+type ProfileResolution struct {
+	Candidates []string
+	Resolved   string
+	Exists     bool
+}
+
 var getAzureAccessToken = func(ctx context.Context, profile string) (azcore.AccessToken, error) {
 	cred, err := newCredential(profile)
 	if err != nil {
@@ -44,18 +50,63 @@ func applyAZProfile(profile string) error {
 }
 
 func azureConfigDir(profile string) (string, error) {
-	if base := os.Getenv("AZURE_PROFILES_DIR"); base != "" {
-		return filepath.Join(base, profile), nil
-	}
-	home, err := os.UserHomeDir()
+	resolution, err := ResolveProfile(profile)
 	if err != nil {
-		return "", fmt.Errorf("resolve home dir for az-profile: %w", err)
+		return "", err
+	}
+	return resolution.Resolved, nil
+}
+
+func ResolveProfile(profile string) (*ProfileResolution, error) {
+	if profile == "" {
+		return &ProfileResolution{}, nil
+	}
+	if base := os.Getenv("AZURE_PROFILES_DIR"); base != "" {
+		resolved := filepath.Join(base, profile)
+		exists, err := pathExists(resolved)
+		if err != nil {
+			return nil, err
+		}
+		return &ProfileResolution{
+			Candidates: []string{resolved},
+			Resolved:   resolved,
+			Exists:     exists,
+		}, nil
+	}
+	home, err := effectiveHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve home dir for az-profile: %w", err)
 	}
 	preferred := filepath.Join(home, ".azure-profiles", profile)
-	if _, err := os.Stat(preferred); err == nil {
-		return preferred, nil
+	legacy := filepath.Join(home, ".azure", "profiles", profile)
+
+	exists, err := pathExists(preferred)
+	if err != nil {
+		return nil, err
 	}
-	return filepath.Join(home, ".azure", "profiles", profile), nil
+	if exists {
+		return &ProfileResolution{
+			Candidates: []string{preferred, legacy},
+			Resolved:   preferred,
+			Exists:     true,
+		}, nil
+	}
+	exists, err = pathExists(legacy)
+	if err != nil {
+		return nil, err
+	}
+	return &ProfileResolution{
+		Candidates: []string{preferred, legacy},
+		Resolved:   legacy,
+		Exists:     exists,
+	}, nil
+}
+
+func effectiveHomeDir() (string, error) {
+	if home := os.Getenv("HOME"); home != "" {
+		return home, nil
+	}
+	return os.UserHomeDir()
 }
 
 func newCredential(profile string) (azcore.TokenCredential, error) {
@@ -67,6 +118,17 @@ func newCredential(profile string) (azcore.TokenCredential, error) {
 		return nil, err
 	}
 	return cred, nil
+}
+
+func pathExists(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if err == nil {
+		return info.IsDir(), nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
 
 func ProbeAuth(ctx context.Context, profile string) (*AuthDetails, error) {

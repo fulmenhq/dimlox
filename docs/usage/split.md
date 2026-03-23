@@ -24,7 +24,7 @@ dimlox split <uri>
 |---|---|---|---|
 | `--mode` | `auto` | Choose `auto`, `stream`, `range`, or `binary` splitting | `dimlox split --mode range --rows 1000000 "gs://example-bucket/data/orders.psv"` |
 | `--rows` | `0` | Set the maximum data rows per shard for text modes | `dimlox split --rows 5000000 "/tmp/orders.psv.gz"` |
-| `--bytes` | `500` | Set the maximum shard size in MiB | `dimlox split --bytes 256 --mode binary "/tmp/archive.bin"` |
+| `--bytes` | `0` | Set the maximum shard size in MiB | `dimlox split --bytes 256 --mode binary "/tmp/archive.bin"` |
 | `--out-dir` | `""` | Choose where shard files are written | `dimlox split --out-dir "/tmp/shards" "/tmp/orders.psv.gz"` |
 | `--out-fmt` | `match` | Choose `match`, `text`, or `gz` output format | `dimlox split --out-fmt gz "/tmp/orders.psv"` |
 | `--header` | `false` | Copy the first line into every text shard | `dimlox split --rows 5000000 --header "/tmp/orders.psv"` |
@@ -172,9 +172,16 @@ dimlox split --dry-run --rows 5000000 --header --out-dir "/tmp/shards" "/tmp/ord
 Dry run behavior:
 
 - prints source, mode, output directory, and manifest path
+- prints operator notes when dry-run cannot predict a value exactly
 - prints one JSON object per planned shard
 - exits `0` on success
 - writes no shard files and no manifest file
+- requires at least one explicit shard limit via `--rows` or `--bytes`
+
+For compressed text output, dry-run reports `logical_bytes` instead of pretending
+it knows the final `.gz` shard size. Final compressed bytes depend on data
+compressibility and shard boundaries. If disk sizing matters, run one
+representative shard and measure the resulting `.gz` file.
 
 ## `.part` safety
 
@@ -194,6 +201,31 @@ This keeps partially written outputs easy to spot and avoids corrupt final shard
 dimlox split --rows 5000000 --header --manifest --out-dir "/tmp/shards" "/tmp/orders.psv.gz"
 ```
 
+### Split a compressed file without unpacking it first
+
+Use this when the source is already gzip-compressed and you want text shards
+without creating a separate uncompressed working copy first:
+
+```bash
+dimlox split --rows 5000000 --header --manifest --out-dir "$HOME/work/shards" \
+  "$HOME/work/price_20240824.psv.gz"
+```
+
+What to expect:
+
+- `split` chooses `stream` mode for compressed text sources
+- the source is forward-streamed and decompressed as it is read
+- shard files are written incrementally; the full uncompressed payload is not held in memory
+- you avoid needing extra local storage for a second full-size uncompressed staging file
+- output shards can stay compressed, which is often easier to archive, move, or hand off downstream
+- `--header` copies the first row into each shard
+- `--manifest` records shard lineage and split settings for downstream use
+
+This is the normal path when you download a large `.psv.gz` or `.csv.gz` file
+from cloud storage and want to shard it directly. The main benefit is storage
+efficiency and operational simplicity, not avoiding decompression or
+recompression work during the split itself.
+
 ### Split a remote uncompressed text file with range mode
 
 ```bash
@@ -207,6 +239,20 @@ dimlox split --mode range --rows 1000000 --header --out-dir "/tmp/shards" \
 dimlox split --dry-run --rows 1000000 --header --out-dir "/tmp/shards" \
   "azblob://exampleaccount/example-container/data/orders.psv"
 ```
+
+### Dry-run a compressed split before writing shards
+
+```bash
+dimlox split --dry-run --rows 5000000 --header --out-dir "$HOME/work/shards" \
+  "$HOME/work/price_20240824.psv.gz"
+```
+
+What to expect:
+
+- dry-run still gives you shard count, row distribution, and output names
+- for gzip shard output, `logical_bytes` reflects uncompressed row payload written into each shard plan
+- final `.gz` shard size is not predicted exactly
+- if disk sizing matters, run one representative shard and measure the resulting file
 
 ### Split binary data by size
 

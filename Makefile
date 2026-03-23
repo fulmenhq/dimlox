@@ -3,12 +3,23 @@
 # Anchor to Makefile directory so VERSION is found even when make is invoked
 # from a subdirectory (e.g. go generate, IDE integrations).
 REPO_ROOT   := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+WINDOWS_HOST := $(filter Windows_NT,$(OS))
+ifeq ($(WINDOWS_HOST),Windows_NT)
+SHELL := powershell.exe
+.SHELLFLAGS := -NoProfile -ExecutionPolicy Bypass -Command
+endif
 
 # Version — read from VERSION file (SSOT). Do not hardcode here.
 # Format: vX.Y.Z  (v prefix is required; matches git tag convention)
+ifeq ($(WINDOWS_HOST),Windows_NT)
+VERSION     := $(shell powershell -NoProfile -ExecutionPolicy Bypass -File "$(REPO_ROOT)scripts/make-windows.ps1" print-version "$(REPO_ROOT)")
+BUILD_TIME  := $(shell powershell -NoProfile -ExecutionPolicy Bypass -File "$(REPO_ROOT)scripts/make-windows.ps1" print-build-time)
+GIT_COMMIT  := $(shell powershell -NoProfile -ExecutionPolicy Bypass -File "$(REPO_ROOT)scripts/make-windows.ps1" print-git-commit "$(REPO_ROOT)")
+else
 VERSION     := $(shell cat "$(REPO_ROOT)VERSION" 2>/dev/null | tr -d '[:space:]' || echo "dev")
 BUILD_TIME  := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GIT_COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+endif
 NAME        ?= dimlox
 MAIN        ?= ./cmd/dimlox
 
@@ -17,16 +28,25 @@ LDFLAGS := -s -w \
 	-X main.buildTime=$(BUILD_TIME) \
 	-X main.gitCommit=$(GIT_COMMIT)
 
+ifeq ($(WINDOWS_HOST),Windows_NT)
+GOOS    ?= $(shell powershell -NoProfile -ExecutionPolicy Bypass -File "$(REPO_ROOT)scripts/make-windows.ps1" go-env GOOS)
+GOARCH  ?= $(shell powershell -NoProfile -ExecutionPolicy Bypass -File "$(REPO_ROOT)scripts/make-windows.ps1" go-env GOARCH)
+else
 GOOS    ?= $(shell go env GOOS)
 GOARCH  ?= $(shell go env GOARCH)
+endif
 EXT     :=
 ifeq ($(GOOS),windows)
 EXT := .exe
 endif
 
+ifeq ($(WINDOWS_HOST),Windows_NT)
+INSTALL_PREFIX  ?= $(if $(USERPROFILE),$(USERPROFILE),$(HOME))
+else
 INSTALL_PREFIX  ?= $(HOME)
+endif
 ifeq ($(GOOS),windows)
-INSTALL_BINDIR  ?= $(if $(APPDATA),$(APPDATA)/dimlox/bin,$(INSTALL_PREFIX)/AppData/Roaming/dimlox/bin)
+INSTALL_BINDIR  ?= $(if $(LOCALAPPDATA),$(LOCALAPPDATA)/Programs/dimlox/bin,$(INSTALL_PREFIX)/AppData/Local/Programs/dimlox/bin)
 else
 INSTALL_BINDIR  ?= $(INSTALL_PREFIX)/.local/bin
 endif
@@ -41,37 +61,53 @@ SFETCH_VERSION  ?= v0.4.5
 GONEAT_VERSION  ?= v0.5.8
 
 # Tool paths — prefer repo-local, fall back to PATH
+ifeq ($(WINDOWS_HOST),Windows_NT)
+SFETCH  = $(shell powershell -NoProfile -ExecutionPolicy Bypass -File "$(REPO_ROOT)scripts/make-windows.ps1" find-tool "$(REPO_ROOT)" "sfetch")
+GONEAT  = $(shell powershell -NoProfile -ExecutionPolicy Bypass -File "$(REPO_ROOT)scripts/make-windows.ps1" find-tool "$(REPO_ROOT)" "goneat")
+else
 SFETCH  = $(shell [ -x "$(BIN_DIR)/sfetch" ]  && echo "$(BIN_DIR)/sfetch"  || command -v sfetch  2>/dev/null)
 GONEAT  = $(shell [ -x "$(BIN_DIR)/goneat" ]  && echo "$(BIN_DIR)/goneat"  || command -v goneat  2>/dev/null)
+endif
 
 .PHONY: all help build build-all build-windows test check fmt vet lint assess \
-        install clean version version-check version-set \
+        install install-path clean version version-check version-set \
         version-patch version-minor version-major \
         precommit prepush bootstrap tools
 
 all: build
 
 help: ## Show this help
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 help "$(REPO_ROOT)Makefile" "$(VERSION)"
+else
 	@echo "dimlox — dimension table manager and large-file cloud tool"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Current version: $(VERSION)"
+endif
 
 # -----------------------------------------------------------------------------
 # Build
 # -----------------------------------------------------------------------------
 
 build: ## Build for current platform
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 build "$(GOOS)" "$(GOARCH)" "$(LDFLAGS)" "$(MAIN)" "$(BUILD_ARTIFACT)"
+else
 	@mkdir -p bin
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="$(LDFLAGS)" \
 		-trimpath \
 		-o $(BUILD_ARTIFACT) $(MAIN)
 	@echo "[ok] Built $(BUILD_ARTIFACT)"
+endif
 
 build-all: ## Build for linux/darwin/windows × amd64/arm64
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 build-all "$(NAME)" "$(LDFLAGS)" "$(MAIN)"
+else
 	@mkdir -p dist/release
 	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/release/$(NAME)-darwin-amd64  $(MAIN)
 	CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/release/$(NAME)-darwin-arm64  $(MAIN)
@@ -80,64 +116,111 @@ build-all: ## Build for linux/darwin/windows × amd64/arm64
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/release/$(NAME)-windows-amd64.exe $(MAIN)
 	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/release/$(NAME)-windows-arm64.exe $(MAIN)
 	@echo "[ok] Built all targets to dist/release/"
+endif
 
 build-windows: ## Cross-compile for Windows amd64 and arm64
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 build-windows "$(LDFLAGS)" "$(MAIN)"
+else
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="$(LDFLAGS)" $(MAIN)
 	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -ldflags="$(LDFLAGS)" $(MAIN)
 	@echo "[ok] Windows cross-compiles passed"
+endif
 
 # -----------------------------------------------------------------------------
 # Quality (the four gates referenced in AGENTS.md)
 # -----------------------------------------------------------------------------
 
 fmt: ## Format Go source
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 go fmt ./...
+else
 	go fmt ./...
+endif
 
 vet: ## Run go vet
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 go vet ./...
+else
 	go vet ./...
+endif
 
-test: ## Run tests with race detector
-	go test -v -race ./...
+ifeq ($(WINDOWS_HOST),Windows_NT)
+RACE_FLAG :=
+else
+RACE := $(shell go env CGO_ENABLED 2>/dev/null)
+ifeq ($(RACE),1)
+RACE_FLAG := -race
+else
+RACE_FLAG :=
+endif
+endif
+
+test: ## Run tests (race detector when CGO_ENABLED=1)
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/test-windows.ps1
+else
+	go test -v $(RACE_FLAG) ./...
+endif
 
 check: fmt vet test ## fmt + vet + test (full local quality gate)
 	@echo "[ok] All checks passed"
 
 # Lint via goneat if available, fall back to vet
 lint: ## Run linters (goneat assess or go vet fallback)
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 lint "$(GONEAT)"
+else
 	@if [ -n "$(GONEAT)" ]; then \
 		$(GONEAT) assess --categories lint --check; \
 	else \
 		echo "[!!] goneat not found, falling back to go vet"; \
 		go vet ./...; \
 	fi
+endif
 
 # Full assess (format + lint + security) — requires goneat
 assess: ## Run goneat assess (format, lint, security)
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 assess "$(GONEAT)"
+else
 	@if [ -z "$(GONEAT)" ]; then echo "[!!] goneat not found (run 'make bootstrap')"; exit 1; fi
 	$(GONEAT) assess --categories format,lint,security --format concise
+endif
 
 # -----------------------------------------------------------------------------
 # Pre-commit / Pre-push
 # -----------------------------------------------------------------------------
 
 precommit: fmt lint vet test build ## fmt + lint + vet + test + build; goneat assess at critical
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 precommit "$(GONEAT)"
+else
 	@if [ -n "$(GONEAT)" ]; then \
 		$(GONEAT) assess --categories format,lint,security --fail-on critical; \
 	else \
 		echo "[!!] goneat not found — skipping assess (run 'make bootstrap')"; \
 	fi
 	@echo "[ok] Pre-commit checks passed"
+endif
 
 prepush: precommit build-all ## precommit + build-all + full assess at high; requires clean tree
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 prepush "$(GONEAT)"
+else
 	@if [ -z "$(GONEAT)" ]; then echo "[!!] goneat not found (run 'make bootstrap')"; exit 1; fi
 	$(GONEAT) assess --categories format,lint,security --fail-on high
 	@echo "[ok] Pre-push checks passed"
+endif
 
 # -----------------------------------------------------------------------------
 # Bootstrap (goneat + optional sfetch)
 # -----------------------------------------------------------------------------
 
 bootstrap: ## Install dev tools via trust chain: curl → sfetch → goneat → tools
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 bootstrap "$(GONEAT)"
+else
 	@echo "Bootstrapping dimlox development environment..."
 	@echo ""
 	@# Step 0: curl is the trust anchor
@@ -192,26 +275,46 @@ bootstrap: ## Install dev tools via trust chain: curl → sfetch → goneat → 
 		echo "[!!] Some security tools may need manual installation"
 	@echo ""
 	@echo "[ok] Bootstrap complete"
+endif
 
 tools: ## Check required tools
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 tools "$(GONEAT)"
+else
 	@if command -v go >/dev/null 2>&1; then echo "[ok] go: $$(go version | cut -d' ' -f3)"; else echo "[!!] go not found"; fi
 	@if [ -n "$(GONEAT)" ]; then echo "[ok] goneat: $$($(GONEAT) version 2>&1 | head -n1)"; else echo "[--] goneat: not found (optional, run 'make bootstrap')"; fi
 	@if command -v git >/dev/null 2>&1; then echo "[ok] git: $$(git --version | cut -d' ' -f3)"; else echo "[!!] git not found"; fi
+endif
 
 # -----------------------------------------------------------------------------
 # Install / Clean
 # -----------------------------------------------------------------------------
 
 install: build ## Install dimlox to INSTALL_BINDIR
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 install "$(BUILD_ARTIFACT)" "$(INSTALL_TARGET)"
+else
 	@mkdir -p "$(INSTALL_BINDIR)"
 	cp "$(BUILD_ARTIFACT)" "$(INSTALL_TARGET)"
 	chmod 755 "$(INSTALL_TARGET)"
 	@echo "[ok] Installed to $(INSTALL_TARGET)"
+endif
+
+install-path: ## Add INSTALL_BINDIR to user PATH on Windows
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 install-path "$(INSTALL_BINDIR)"
+else
+	@echo "[ok] $(INSTALL_BINDIR) is the standard install location on this platform"
+endif
 
 clean: ## Remove build artifacts and Go build cache
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 clean
+else
 	rm -rf bin/ dist/ coverage.out
 	go clean -cache
 	@echo "[ok] Cleaned"
+endif
 
 # -----------------------------------------------------------------------------
 # Version management (VERSION file is SSOT — do not edit directly)
@@ -226,11 +329,18 @@ version-check: ## Print current version (verbose)
 	@echo "Build time:      $(BUILD_TIME)"
 
 version-set: ## Set version (usage: make version-set V=vX.Y.Z)
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 version-set "$(REPO_ROOT)" "$(V)"
+else
 	@if [ -z "$(V)" ]; then echo "usage: make version-set V=vX.Y.Z" >&2; exit 1; fi
 	@printf '%s\n' "$(V)" > "$(REPO_ROOT)VERSION"
 	@echo "[ok] Version set to $(V)"
+endif
 
 version-patch: ## Bump patch version (v0.1.0 → v0.1.1)
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 version-patch "$(REPO_ROOT)"
+else
 	@current=$$(cat "$(REPO_ROOT)VERSION" | tr -d '[:space:]'); \
 	major=$$(echo $$current | cut -d. -f1); \
 	minor=$$(echo $$current | cut -d. -f2); \
@@ -238,19 +348,28 @@ version-patch: ## Bump patch version (v0.1.0 → v0.1.1)
 	newver="$$major.$$minor.$$((patch + 1))"; \
 	printf '%s\n' "$$newver" > "$(REPO_ROOT)VERSION"; \
 	echo "[ok] $$current → $$newver"
+endif
 
 version-minor: ## Bump minor version (v0.1.0 → v0.2.0)
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 version-minor "$(REPO_ROOT)"
+else
 	@current=$$(cat "$(REPO_ROOT)VERSION" | tr -d '[:space:]'); \
 	major=$$(echo $$current | cut -d. -f1); \
 	minor=$$(echo $$current | cut -d. -f2); \
 	newver="$$major.$$((minor + 1)).0"; \
 	printf '%s\n' "$$newver" > "$(REPO_ROOT)VERSION"; \
 	echo "[ok] $$current → $$newver"
+endif
 
 version-major: ## Bump major version (v0.1.0 → v1.0.0)
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 version-major "$(REPO_ROOT)"
+else
 	@current=$$(cat "$(REPO_ROOT)VERSION" | tr -d '[:space:]'); \
 	prefix=$$(echo $$current | cut -d. -f1 | grep -o '^v'); \
 	majornum=$$(echo $$current | cut -d. -f1 | tr -d 'v'); \
 	newver="$${prefix}$$((majornum + 1)).0.0"; \
 	printf '%s\n' "$$newver" > "$(REPO_ROOT)VERSION"; \
 	echo "[ok] $$current → $$newver"
+endif

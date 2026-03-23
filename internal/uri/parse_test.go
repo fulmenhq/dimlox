@@ -3,6 +3,7 @@ package uri
 import (
 	"errors"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -11,6 +12,24 @@ func TestParse(t *testing.T) {
 	relPath, err := filepath.Abs("./relative/file.csv")
 	if err != nil {
 		t.Fatalf("resolve relative path: %v", err)
+	}
+	relNormalized := "file://" + filepath.ToSlash(relPath)
+	if runtime.GOOS == "windows" {
+		// Windows: file:///C:/... (leading slash before drive letter)
+		relNormalized = "file:///" + filepath.ToSlash(relPath)
+	}
+
+	// Platform-aware expected values for local path tests.
+	absLocalPath, _ := filepath.Abs("/absolute/path/file.csv")
+	absLocalNormalized := "file://" + filepath.ToSlash(absLocalPath)
+	if runtime.GOOS == "windows" && !strings.HasPrefix(filepath.ToSlash(absLocalPath), "/") {
+		absLocalNormalized = "file:///" + filepath.ToSlash(absLocalPath)
+	}
+
+	fileURIPath, _ := filepath.Abs("/path/to/file")
+	fileURINormalized := "file://" + filepath.ToSlash(fileURIPath)
+	if runtime.GOOS == "windows" && !strings.HasPrefix(filepath.ToSlash(fileURIPath), "/") {
+		fileURINormalized = "file:///" + filepath.ToSlash(fileURIPath)
 	}
 
 	tests := []struct {
@@ -66,22 +85,22 @@ func TestParse(t *testing.T) {
 			name:           "absolute local path",
 			input:          "/absolute/path/file.csv",
 			wantProvider:   ProviderLocal,
-			wantNormalized: "file:///absolute/path/file.csv",
-			wantLocalPath:  "/absolute/path/file.csv",
+			wantNormalized: absLocalNormalized,
+			wantLocalPath:  absLocalPath,
 		},
 		{
 			name:           "relative local path",
 			input:          "./relative/file.csv",
 			wantProvider:   ProviderLocal,
-			wantNormalized: "file://" + relPath,
+			wantNormalized: relNormalized,
 			wantLocalPath:  relPath,
 		},
 		{
 			name:           "file uri",
 			input:          "file:///path/to/file",
 			wantProvider:   ProviderLocal,
-			wantNormalized: "file:///path/to/file",
-			wantLocalPath:  "/path/to/file",
+			wantNormalized: fileURINormalized,
+			wantLocalPath:  fileURIPath,
 		},
 		{
 			name:           "azure blob path trailing slash stripped",

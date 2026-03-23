@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -87,7 +88,7 @@ func Parse(raw string) (*ParsedURI, error) {
 	}
 
 	// Local path shortcuts: absolute or relative paths, no scheme.
-	if strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "./") || strings.HasPrefix(raw, "../") {
+	if strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "./") || strings.HasPrefix(raw, "../") || isWindowsDrivePath(raw) {
 		return parseLocal(raw)
 	}
 
@@ -98,7 +99,13 @@ func Parse(raw string) (*ParsedURI, error) {
 
 	switch {
 	case u.Scheme == "file":
-		return parseLocal(u.Path)
+		p := u.Path
+		// On Windows, url.Parse("file:///C:/path") yields Path="/C:/path".
+		// Strip the leading slash so filepath.Abs sees "C:/path".
+		if runtime.GOOS == "windows" && len(p) >= 3 && p[0] == '/' && p[2] == ':' {
+			p = p[1:]
+		}
+		return parseLocal(p)
 
 	case u.Scheme == "azblob":
 		return parseAZBlobNative(u, raw)
@@ -126,9 +133,15 @@ func parseLocal(path string) (*ParsedURI, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot resolve local path %q: %w", path, err)
 	}
+	// Build a proper file URI: file:///path (forward slashes, no backslashes).
+	uriPath := filepath.ToSlash(abs)
+	if !strings.HasPrefix(uriPath, "/") {
+		// Windows absolute paths like C:/... need a leading slash in file URIs.
+		uriPath = "/" + uriPath
+	}
 	return &ParsedURI{
 		Provider:   ProviderLocal,
-		Normalized: "file://" + abs,
+		Normalized: "file://" + uriPath,
 		LocalPath:  abs,
 	}, nil
 }
@@ -254,4 +267,20 @@ func normalizeObjectPath(path string) string {
 func hasContainerOnlyTrailingSlash(path string) bool {
 	trimmed := strings.TrimSuffix(path, "/")
 	return path != "" && strings.HasSuffix(path, "/") && trimmed != "" && !strings.Contains(trimmed, "/")
+}
+
+// isWindowsDrivePath returns true for paths like "C:\...", "D:/...", "C:file".
+// Only matches on Windows to avoid treating single-letter URI schemes as paths.
+func isWindowsDrivePath(raw string) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	if len(raw) < 2 {
+		return false
+	}
+	letter := raw[0]
+	if !((letter >= 'A' && letter <= 'Z') || (letter >= 'a' && letter <= 'z')) {
+		return false
+	}
+	return raw[1] == ':'
 }

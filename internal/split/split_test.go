@@ -2,6 +2,7 @@ package split
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -113,6 +114,45 @@ func TestStreamSplitDryRunWritesNoFiles(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("outDir entries = %d, want 0", len(entries))
+	}
+}
+
+func TestStreamSplitDryRunCompressedReportsLogicalBytes(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	src := filepath.Join(t.TempDir(), "sample.psv.gz")
+	var payload bytes.Buffer
+	gz := gzip.NewWriter(&payload)
+	if _, err := gz.Write([]byte("c1|c2\n1|2\n3|4\n")); err != nil {
+		t.Fatalf("gz.Write: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("gz.Close: %v", err)
+	}
+	if err := os.WriteFile(src, payload.Bytes(), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	res, err := Split(context.Background(), src, Options{Rows: 1, Header: true, OutDir: outDir, Manifest: true, DryRun: true})
+	if err != nil {
+		t.Fatalf("Split() error = %v", err)
+	}
+	if len(res.Notes) != 1 || !strings.Contains(res.Notes[0], "run one representative shard") {
+		t.Fatalf("Notes = %#v, want compressed dry-run guidance", res.Notes)
+	}
+	if len(res.Shards) != 2 {
+		t.Fatalf("len(Shards) = %d, want 2", len(res.Shards))
+	}
+	if res.Shards[0].ShardBytes != 0 {
+		t.Fatalf("ShardBytes = %d, want omitted/zero for compressed dry-run", res.Shards[0].ShardBytes)
+	}
+	if res.Shards[0].LogicalBytes == 0 {
+		t.Fatal("LogicalBytes = 0, want logical byte count for compressed dry-run")
+	}
+	if !strings.Contains(res.Shards[0].ShardBytesNote, "Final .gz size depends on data compressibility") {
+		t.Fatalf("ShardBytesNote = %q, want compressed dry-run note", res.Shards[0].ShardBytesNote)
 	}
 }
 
@@ -386,7 +426,9 @@ func TestBinarySplitUsesFixedReadBuffer(t *testing.T) {
 	fake := &stubSplitProvider{
 		meta: &provider.ObjectMeta{Name: "sample.bin", Size: 10, ContentType: "application/octet-stream"},
 		readerFactory: func(int64, int64) (io.ReadCloser, error) {
-			tracker.Reader.Seek(0, io.SeekStart)
+			if _, err := tracker.Reader.Seek(0, io.SeekStart); err != nil {
+				return nil, err
+			}
 			tracker.maxReadLen = 0
 			return tracker, nil
 		},
@@ -436,7 +478,9 @@ func TestBinarySplitCancelsWithoutLeavingPartFiles(t *testing.T) {
 	fake := &stubSplitProvider{
 		meta: &provider.ObjectMeta{Name: "sample.bin", Size: 8, ContentType: "application/octet-stream"},
 		readerFactory: func(int64, int64) (io.ReadCloser, error) {
-			tracker.Reader.Seek(0, io.SeekStart)
+			if _, err := tracker.Reader.Seek(0, io.SeekStart); err != nil {
+				return nil, err
+			}
 			tracker.fired = false
 			return tracker, nil
 		},

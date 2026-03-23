@@ -9,9 +9,11 @@ import (
 )
 
 type shardStats struct {
-	rows  int64
-	bytes int64
-	md5   []byte
+	rows         int64
+	bytes        int64
+	logicalBytes int64
+	bytesNote    string
+	md5          []byte
 }
 
 type shardWriter struct {

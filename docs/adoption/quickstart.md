@@ -17,6 +17,9 @@ make install
 dimlox --version
 ```
 
+On Windows developer shells, run `make install-path` once after `make install`,
+then open a new terminal before using `dimlox` by name.
+
 If you do not want to install yet, use `go run ./cmd/dimlox` in the commands below.
 
 ## 2. Confirm auth and environment

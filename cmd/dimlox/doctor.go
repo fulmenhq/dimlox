@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -58,12 +59,15 @@ func printDoctorResult(cmd *cobra.Command, result *doctor.Result) {
 		_, _ = fmt.Fprintf(out, "go: %s\n", result.GoVersion)
 		_, _ = fmt.Fprintf(out, "platform: %s\n", result.OSArch)
 		for _, status := range result.Statuses {
-			state := "ok"
-			if !status.OK {
-				state = status.Kind + " failure"
-			}
-			_, _ = fmt.Fprintf(out, "%s: %s - %s\n", status.Provider, state, status.Detail)
+			printDoctorStatus(out, status)
 		}
+		return
+	}
+
+	if result.Status != nil {
+		_, _ = fmt.Fprintf(out, "provider: %s\n", result.ProviderName)
+		_, _ = fmt.Fprintf(out, "normalized: %s\n", result.Normalized)
+		printDoctorStatus(out, *result.Status)
 		return
 	}
 
@@ -79,4 +83,23 @@ func printDoctorResult(cmd *cobra.Command, result *doctor.Result) {
 		}
 	}
 	_, _ = fmt.Fprintf(out, "latency: %s\n", result.ProbeLatency.Round(10*time.Millisecond))
+}
+
+func printDoctorStatus(out io.Writer, status doctor.Status) {
+	state := "ok"
+	if !status.OK {
+		state = status.Kind + " failure"
+	}
+	if status.Kind == "setup" {
+		detail := strings.TrimRight(status.Detail, "\n")
+		lines := strings.Split(detail, "\n")
+		if len(lines) > 0 {
+			_, _ = fmt.Fprintf(out, "%s: %s - %s\n", status.Provider, state, lines[0])
+			for _, line := range lines[1:] {
+				_, _ = fmt.Fprintf(out, "%s\n", line)
+			}
+			return
+		}
+	}
+	_, _ = fmt.Fprintf(out, "%s: %s - %s\n", status.Provider, state, status.Detail)
 }

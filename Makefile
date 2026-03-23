@@ -46,7 +46,7 @@ else
 INSTALL_PREFIX  ?= $(HOME)
 endif
 ifeq ($(GOOS),windows)
-INSTALL_BINDIR  ?= $(if $(APPDATA),$(APPDATA)/dimlox/bin,$(INSTALL_PREFIX)/AppData/Roaming/dimlox/bin)
+INSTALL_BINDIR  ?= $(if $(LOCALAPPDATA),$(LOCALAPPDATA)/Programs/dimlox/bin,$(INSTALL_PREFIX)/AppData/Local/Programs/dimlox/bin)
 else
 INSTALL_BINDIR  ?= $(INSTALL_PREFIX)/.local/bin
 endif
@@ -70,7 +70,7 @@ GONEAT  = $(shell [ -x "$(BIN_DIR)/goneat" ]  && echo "$(BIN_DIR)/goneat"  || co
 endif
 
 .PHONY: all help build build-all build-windows test check fmt vet lint assess \
-        install clean version version-check version-set \
+        install install-path clean version version-check version-set \
         version-patch version-minor version-major \
         precommit prepush bootstrap tools
 
@@ -298,6 +298,13 @@ else
 	cp "$(BUILD_ARTIFACT)" "$(INSTALL_TARGET)"
 	chmod 755 "$(INSTALL_TARGET)"
 	@echo "[ok] Installed to $(INSTALL_TARGET)"
+endif
+
+install-path: ## Add INSTALL_BINDIR to user PATH on Windows
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 install-path "$(INSTALL_BINDIR)"
+else
+	@echo "[ok] $(INSTALL_BINDIR) is the standard install location on this platform"
 endif
 
 clean: ## Remove build artifacts and Go build cache

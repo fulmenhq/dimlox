@@ -26,21 +26,12 @@ git clone https://github.com/fulmenhq/dimlox.git
 cd dimlox
 make build
 make install
+make install-path
 ```
 
-`make install` places the binary at `%APPDATA%\dimlox\bin\dimlox.exe`.
-
-Add this to your PATH if it is not already there:
-
-```powershell
-# Current session
-$env:PATH += ";$env:APPDATA\dimlox\bin"
-
-# Permanent (user-level)
-[Environment]::SetEnvironmentVariable("PATH",
-    [Environment]::GetEnvironmentVariable("PATH", "User") + ";$env:APPDATA\dimlox\bin",
-    "User")
-```
+`make install` places the binary at `%LOCALAPPDATA%\Programs\dimlox\bin\dimlox.exe`.
+`make install-path` adds that directory to the user PATH for developer shells.
+Open a new terminal after running it.
 
 Verify:
 

@@ -328,6 +328,29 @@ switch ($Action) {
         Write-Host "[ok] Installed to $installTarget"
     }
 
+    "install-path" {
+        $installBinDir = $Args[0]
+        $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+        $parts = @()
+        if ($userPath) {
+            $parts = $userPath.Split(";") | Where-Object { $_ -ne "" }
+        }
+
+        $normalizedTarget = $installBinDir.TrimEnd("\", "/")
+        foreach ($part in $parts) {
+            if ($part.TrimEnd("\", "/") -ieq $normalizedTarget) {
+                Write-Host "[ok] User PATH already contains $installBinDir"
+                Write-Host "[..] Open a new terminal to pick up PATH changes."
+                exit 0
+            }
+        }
+
+        $newPath = if ($userPath) { "$userPath;$installBinDir" } else { $installBinDir }
+        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+        Write-Host "[ok] Added $installBinDir to user PATH"
+        Write-Host "[..] Open a new terminal to use 'dimlox' by name."
+    }
+
     "clean" {
         $paths = @("bin", "dist", "coverage.out", ".tmp/build-check")
         foreach ($path in $paths) {

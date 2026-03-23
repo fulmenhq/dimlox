@@ -152,7 +152,11 @@ make install        # copies binary to ~/.local/bin/dimlox
 Default install location:
 
 - Linux / macOS: `~/.local/bin/dimlox`
-- Windows: `%APPDATA%/dimlox/bin/dimlox.exe`
+- Windows: `%LOCALAPPDATA%/Programs/dimlox/bin/dimlox.exe`
+
+For Windows developer shells, run `make install-path` once to add the install
+directory to the user PATH. Long-term end-user distribution is expected to go
+through Scoop rather than `make install`.
 
 ## Windows status
 

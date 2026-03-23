@@ -14,6 +14,7 @@ Assumptions:
 ```bash
 make bootstrap
 make install
+make install-path   # Windows developer shells
 dimlox --version
 ```
 

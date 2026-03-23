@@ -176,7 +176,7 @@ Ctrl+C cleanup (removing `.part` files) must work on all platforms:
 - `DIMLOX_LANDING_DIR` must resolve correctly on all platforms. If unset,
   fall back to `os.TempDir()`, not a POSIX-specific path.
 - Install paths: `~/.local/bin/dimlox` on Linux/macOS,
-  `%APPDATA%\dimlox\bin\dimlox.exe` on Windows, as documented in README.
+  `%LOCALAPPDATA%\Programs\dimlox\bin\dimlox.exe` on Windows, as documented in README.
 
 ### 7a. Tooling caches on Windows
 

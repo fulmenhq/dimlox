@@ -5,8 +5,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/fulmenhq/dimlox/internal/doctor"
 )
 
 func TestRootVersionFlag(t *testing.T) {
@@ -159,5 +162,33 @@ func TestExitCodeForDiskFull(t *testing.T) {
 	err := withExitCode(exitOperational, "%v", &os.PathError{Op: "write", Path: "/tmp/out", Err: syscall.ENOSPC})
 	if got := exitCodeFor(err); got != exitDiskFull {
 		t.Fatalf("exitCodeFor(disk full) = %d, want %d", got, exitDiskFull)
+	}
+}
+
+func TestPrintDoctorResultRendersSetupGuidance(t *testing.T) {
+	cmd := rootCmd()
+	stdout := new(bytes.Buffer)
+	cmd.SetOut(stdout)
+
+	printDoctorResult(cmd, &doctor.Result{
+		AppVersion: "v0.1.0",
+		GoVersion:  "go1.25.5",
+		OSArch:     "windows/amd64",
+		Statuses: []doctor.Status{
+			{
+				Provider: "azblob",
+				OK:       false,
+				Kind:     "setup",
+				Detail:   "az-profile \"client-a\" not found\n\n  Then retry: dimlox doctor --az-profile client-a",
+			},
+		},
+	})
+
+	got := stdout.String()
+	if !strings.Contains(got, "azblob: setup failure - az-profile \"client-a\" not found") {
+		t.Fatalf("stdout = %q, want setup headline", got)
+	}
+	if !strings.Contains(got, "Then retry: dimlox doctor --az-profile client-a") {
+		t.Fatalf("stdout = %q, want retry guidance", got)
 	}
 }

@@ -71,45 +71,60 @@ login under `~/.azure` is enough.
 
 ## Named profile setup
 
-Named profiles are useful when you switch between clients or tenants.
+Named profiles are useful when you switch between clients or tenants. Each
+profile is just an isolated Azure CLI config directory — `dimlox` picks it up
+via `--az-profile <name>`.
 
-### Option A: use the local shell helper
+### Create a named profile
 
-On this machine we use an `az-profile` helper that sets `AZURE_CONFIG_DIR` to a
-profile-specific directory under `~/.azure-profiles/`.
+Set `AZURE_CONFIG_DIR` to a new profile-specific directory, create it, and login:
 
-Example:
+**Windows (PowerShell):**
 
-```bash
-az-profile client-a
+```powershell
+$env:AZURE_CONFIG_DIR = "$env:USERPROFILE\.azure-profiles\e3-filemage"
+New-Item -ItemType Directory -Force -Path $env:AZURE_CONFIG_DIR
 az login
 az account show
 ```
 
-Then run `dimlox` with the matching profile name:
+**Linux / macOS:**
 
 ```bash
-dimlox doctor --az-profile client-a
-dimlox ls --az-profile client-a azblob://<account>/<container>/
-```
-
-### Option B: do it manually
-
-If you do not have the helper, set the profile directory yourself:
-
-```bash
-export AZURE_CONFIG_DIR="$HOME/.azure-profiles/client-a"
+export AZURE_CONFIG_DIR="$HOME/.azure-profiles/e3-filemage"
 mkdir -p "$AZURE_CONFIG_DIR"
 az login
 az account show
 ```
 
-You can also pin the subscription explicitly if needed:
+Replace `e3-filemage` with whatever name makes sense for the account or client.
+
+If the account has multiple subscriptions, pin the one you need:
 
 ```bash
 az account set --subscription "<subscription-name-or-id>"
 az account show
 ```
+
+### Use the profile with dimlox
+
+Once the profile exists and has a login, pass the name to any `dimlox` command:
+
+```bash
+dimlox doctor --az-profile e3-filemage
+dimlox ls --az-profile e3-filemage azblob://<account>/<container>/
+```
+
+### Switching profiles
+
+To switch, just set `AZURE_CONFIG_DIR` again in your current shell. Some teams
+wrap this in a small shell helper or alias to avoid typing the full path each
+time — but the underlying mechanism is always the same env var.
+
+> **Future direction:** `dimlox doctor` already validates Azure auth. A natural
+> extension would be to let `doctor` guide you through profile creation
+> interactively when a named profile does not exist yet — eliminating the need
+> for manual directory setup or external helper scripts.
 
 ## How `dimlox` resolves `--az-profile`
 
@@ -125,9 +140,9 @@ This lets developers use either the local helper pattern or an older profile lay
 ## Quick verification
 
 ```bash
-dimlox doctor --az-profile client-a
-dimlox ls --az-profile client-a --limit 5 azblob://<account>/<container>/
-dimlox doctor --az-profile client-a azblob://<account>/<container>/<blob>
+dimlox doctor --az-profile e3-filemage
+dimlox ls --az-profile e3-filemage --limit 5 azblob://<account>/<container>/
+dimlox doctor --az-profile e3-filemage azblob://<account>/<container>/<blob>
 ```
 
 Expected shape:

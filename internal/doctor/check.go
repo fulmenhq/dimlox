@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -20,6 +22,7 @@ var (
 	probeAzureAuth        = providerazblob.ProbeAuth
 	probeGCSAuth          = providergcs.ProbeAuth
 	describeGCSAuthSource = providergcs.DescribeAuthSource
+	resolveAzureProfile   = providerazblob.ResolveProfile
 	nowFunc               = time.Now
 )
 
@@ -38,6 +41,7 @@ type Status struct {
 
 type Result struct {
 	Statuses     []Status             `json:"statuses,omitempty"`
+	Status       *Status              `json:"status,omitempty"`
 	Target       string               `json:"target,omitempty"`
 	Normalized   string               `json:"normalized,omitempty"`
 	ProbeLatency time.Duration        `json:"probe_latency,omitempty"`
@@ -51,10 +55,12 @@ type Result struct {
 func Run(ctx context.Context, target string, opts Options) (*Result, error) {
 	result := &Result{GoVersion: runtime.Version(), AppVersion: opts.Version, OSArch: runtime.GOOS + "/" + runtime.GOARCH}
 	if target == "" {
-		statuses := []Status{
-			probeLocal(),
-			probeAzure(ctx, opts.AZProfile),
-			probeGCS(ctx),
+		statuses := []Status{probeLocal()}
+		if shouldProbeAzure(opts) {
+			statuses = append(statuses, probeAzure(ctx, opts.AZProfile))
+		}
+		if shouldProbeGCS(opts) {
+			statuses = append(statuses, probeGCS(ctx))
 		}
 		result.Statuses = statuses
 		for _, status := range statuses {
@@ -65,12 +71,26 @@ func Run(ctx context.Context, target string, opts Options) (*Result, error) {
 		return result, nil
 	}
 
-	p, parsed, err := providers.ForURI(ctx, target, providers.Options{AZProfile: opts.AZProfile, GCPProject: opts.GCPProject})
+	parsed, err := uri.Parse(target)
 	if err != nil {
 		return nil, err
 	}
 	result.Target = target
 	result.Normalized = parsed.Normalized
+	result.ProviderName = parsed.Provider.String()
+
+	if parsed.Provider == uri.ProviderAZBlob {
+		status := probeAzure(ctx, opts.AZProfile)
+		if !status.OK {
+			result.Status = &status
+			return result, fmt.Errorf("doctor checks failed")
+		}
+	}
+
+	p, _, err := providers.ForURI(ctx, target, providers.Options{AZProfile: opts.AZProfile, GCPProject: opts.GCPProject})
+	if err != nil {
+		return result, err
+	}
 	result.ProviderName = p.Name()
 
 	start := time.Now()
@@ -118,8 +138,18 @@ func probeLocal() Status {
 }
 
 func probeAzure(ctx context.Context, profile string) Status {
+	status, resolution, err := azureProfileSetupStatus(profile)
+	if err != nil {
+		return Status{Provider: "azblob", OK: false, Kind: classify(err), Detail: err.Error()}
+	}
+	if status != nil {
+		return *status
+	}
 	details, err := probeAzureAuth(ctx, profile)
 	if err != nil {
+		if status := azureLoginSetupStatus(profile, resolution, err); status != nil {
+			return *status
+		}
 		kind := classify(err)
 		return Status{Provider: "azblob", OK: false, Kind: kind, Detail: err.Error()}
 	}
@@ -131,6 +161,158 @@ func probeAzure(ctx context.Context, profile string) Status {
 		detail += " (" + suffix + ")"
 	}
 	return Status{Provider: "azblob", OK: true, Detail: detail}
+}
+
+func shouldProbeAzure(opts Options) bool {
+	return opts.AZProfile != "" || opts.GCPProject == ""
+}
+
+func shouldProbeGCS(opts Options) bool {
+	return opts.GCPProject != "" || opts.AZProfile == ""
+}
+
+func azureProfileSetupStatus(profile string) (*Status, *providerazblob.ProfileResolution, error) {
+	if profile == "" {
+		return nil, nil, nil
+	}
+	resolution, err := resolveAzureProfile(profile)
+	if err != nil {
+		return nil, nil, err
+	}
+	if resolution.Exists {
+		return nil, resolution, nil
+	}
+	return &Status{
+		Provider: "azblob",
+		OK:       false,
+		Kind:     "setup",
+		Detail:   formatAzureProfileGuidance(profile, resolution),
+	}, resolution, nil
+}
+
+func azureLoginSetupStatus(profile string, resolution *providerazblob.ProfileResolution, err error) *Status {
+	if !strings.Contains(strings.ToLower(err.Error()), "please run 'az login'") {
+		return nil
+	}
+	return &Status{
+		Provider: "azblob",
+		OK:       false,
+		Kind:     "setup",
+		Detail:   formatAzureLoginGuidance(profile, resolution),
+	}
+}
+
+func formatAzureProfileGuidance(profile string, resolution *providerazblob.ProfileResolution) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "az-profile %q not found\n\n", profile)
+	b.WriteString("  No profile directory exists at:\n")
+	for _, candidate := range resolution.Candidates {
+		fmt.Fprintf(&b, "    %s\n", describePath(candidate))
+	}
+	b.WriteString("\n")
+	b.WriteString("  To create this profile:\n\n")
+	if runtime.GOOS == "windows" {
+		fmt.Fprintf(&b, "    # Windows (PowerShell)\n")
+		fmt.Fprintf(&b, "    $env:AZURE_CONFIG_DIR = \"$env:USERPROFILE\\.azure-profiles\\%s\"\n", profile)
+		b.WriteString("    New-Item -ItemType Directory -Force -Path $env:AZURE_CONFIG_DIR\n")
+		b.WriteString("    az login\n\n")
+		fmt.Fprintf(&b, "    # Linux / macOS\n")
+		fmt.Fprintf(&b, "    export AZURE_CONFIG_DIR=\"$HOME/.azure-profiles/%s\"\n", profile)
+		b.WriteString("    mkdir -p \"$AZURE_CONFIG_DIR\"\n")
+		b.WriteString("    az login\n\n")
+	} else {
+		fmt.Fprintf(&b, "    # Linux / macOS\n")
+		fmt.Fprintf(&b, "    export AZURE_CONFIG_DIR=\"$HOME/.azure-profiles/%s\"\n", profile)
+		b.WriteString("    mkdir -p \"$AZURE_CONFIG_DIR\"\n")
+		b.WriteString("    az login\n\n")
+		fmt.Fprintf(&b, "    # Windows (PowerShell)\n")
+		fmt.Fprintf(&b, "    $env:AZURE_CONFIG_DIR = \"$env:USERPROFILE\\.azure-profiles\\%s\"\n", profile)
+		b.WriteString("    New-Item -ItemType Directory -Force -Path $env:AZURE_CONFIG_DIR\n")
+		b.WriteString("    az login\n\n")
+	}
+	fmt.Fprintf(&b, "  Then retry: dimlox doctor --az-profile %s", profile)
+	return b.String()
+}
+
+func formatAzureLoginGuidance(profile string, resolution *providerazblob.ProfileResolution) string {
+	var b strings.Builder
+	b.WriteString("Azure CLI profile not logged in")
+	if profile != "" {
+		fmt.Fprintf(&b, " (az-profile=%s)", profile)
+	}
+	b.WriteString("\n\n")
+	b.WriteString("  Run this in your shell to select the same profile directory:\n\n")
+	if runtime.GOOS == "windows" {
+		fmt.Fprintf(&b, "    $env:AZURE_CONFIG_DIR = \"%s\"\n", windowsCommandPath(profile, resolution))
+		b.WriteString("    az login\n\n")
+	} else {
+		fmt.Fprintf(&b, "    export AZURE_CONFIG_DIR=\"%s\"\n", posixCommandPath(profile, resolution))
+		b.WriteString("    az login\n\n")
+	}
+	if profile != "" {
+		fmt.Fprintf(&b, "  Then retry: dimlox doctor --az-profile %s", profile)
+	} else {
+		b.WriteString("  Then retry: dimlox doctor")
+	}
+	return b.String()
+}
+
+func windowsCommandPath(profile string, resolution *providerazblob.ProfileResolution) string {
+	if resolution != nil && resolution.Resolved != "" {
+		return resolution.Resolved
+	}
+	if home, err := effectiveHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".azure-profiles", profile)
+	}
+	return profile
+}
+
+func posixCommandPath(profile string, resolution *providerazblob.ProfileResolution) string {
+	path := ""
+	if resolution != nil {
+		path = resolution.Resolved
+	}
+	if path == "" {
+		if home, err := effectiveHomeDir(); err == nil && home != "" {
+			path = filepath.Join(home, ".azure-profiles", profile)
+		}
+	}
+	if path == "" {
+		return profile
+	}
+	home, err := effectiveHomeDir()
+	if err == nil && home != "" {
+		rel, relErr := filepath.Rel(home, path)
+		if relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return "$HOME/" + filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(path)
+}
+
+func describePath(path string) string {
+	if path == "" {
+		return path
+	}
+	home, err := effectiveHomeDir()
+	if err == nil && home != "" {
+		rel, relErr := filepath.Rel(home, path)
+		switch {
+		case relErr != nil:
+		case rel == ".":
+			return "~"
+		case rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)):
+			return "~/" + filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(path)
+}
+
+func effectiveHomeDir() (string, error) {
+	if home := os.Getenv("HOME"); home != "" {
+		return home, nil
+	}
+	return os.UserHomeDir()
 }
 
 func probeGCS(ctx context.Context) Status {

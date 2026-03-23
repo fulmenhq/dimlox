@@ -183,6 +183,26 @@ function Write-VersionValue {
     [System.IO.File]::WriteAllText($versionPath, "$Version`n")
 }
 
+function Invoke-GoneatToolDoctor {
+    param(
+        [string]$GoneatPath,
+        [string]$Scope
+    )
+
+    $installArgs = @("doctor", "tools", "--scope", $Scope, "--install", "--yes", "--no-cooling")
+    & $GoneatPath $installArgs
+    if ($LASTEXITCODE -eq 0) {
+        return 0
+    }
+
+    $upgradeArgs = @("doctor", "tools", "--scope", $Scope, "--upgrade", "--yes", "--no-cooling")
+    & $GoneatPath $upgradeArgs
+
+    $verifyArgs = @("doctor", "tools", "--scope", $Scope, "--no-cooling")
+    & $GoneatPath $verifyArgs
+    return $LASTEXITCODE
+}
+
 switch ($Action) {
     "go-env" {
         Initialize-GoEnv
@@ -321,6 +341,43 @@ switch ($Action) {
             exit $LASTEXITCODE
         }
         Write-Host "[ok] Cleaned"
+    }
+
+    "bootstrap" {
+        $goneatPath = $Args[0]
+        if (-not $goneatPath) {
+            Write-Host "[!!] goneat not found. Install it first, then rerun 'make bootstrap'."
+            Write-Host "Suggested install path on this machine: scoop install goneat"
+            exit 1
+        }
+
+        Write-Host "Bootstrapping dimlox development environment on Windows..."
+        $failedScopes = @()
+
+        $foundationExit = Invoke-GoneatToolDoctor -GoneatPath $goneatPath -Scope "foundation"
+        if ($foundationExit -ne 0) {
+            Write-Host "[!!] Foundation tool bootstrap did not complete cleanly."
+            $failedScopes += "foundation"
+        }
+
+        $goExit = Invoke-GoneatToolDoctor -GoneatPath $goneatPath -Scope "go"
+        if ($goExit -ne 0) {
+            Write-Host "[!!] Go tool bootstrap did not complete cleanly."
+            $failedScopes += "go"
+        }
+
+        $securityExit = Invoke-GoneatToolDoctor -GoneatPath $goneatPath -Scope "security"
+        if ($securityExit -ne 0) {
+            Write-Host "[!!] Security tool bootstrap did not complete cleanly."
+            $failedScopes += "security"
+        }
+
+        if ($failedScopes.Count -gt 0) {
+            Write-Host ("[!!] Bootstrap incomplete. Review goneat output for scope(s): {0}" -f ($failedScopes -join ", "))
+            exit 1
+        }
+
+        Write-Host "[ok] Bootstrap complete"
     }
 
     "version-set" {

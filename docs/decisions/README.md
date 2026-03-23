@@ -9,4 +9,4 @@ ADRs are numbered sequentially. Do not reuse or renumber.
 
 | ADR | Title | Status | Date |
 |-----|-------|--------|------|
-| [0001](0001-cross-platform-compatibility.md) | Cross-Platform Compatibility Requirements | Accepted | 2026-03-22 |
+| [0001](ADR-0001-cross-platform-compatibility.md) | Cross-Platform Compatibility Requirements | Accepted | 2026-03-22 |

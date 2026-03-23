@@ -26,6 +26,37 @@ brew install azure-cli
 az version
 ```
 
+### Windows
+
+The recommended install method is `winget` (ships with Windows 11 and recent Windows 10):
+
+```powershell
+winget install Microsoft.AzureCLI
+```
+
+Close and reopen your terminal after install so `az` is on PATH.
+
+Alternatives:
+
+- **Scoop**: `scoop install azure-cli` (from the `main` bucket)
+- **MSI installer**: download from [Microsoft's Azure CLI install page](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-windows) and run the `.msi`
+- **Chocolatey**: `choco install azure-cli`
+
+Verify:
+
+```powershell
+az version
+```
+
+The rest of this guide (login, profiles, `--az-profile`) works the same on Windows.
+The only difference is path separators in `AZURE_CONFIG_DIR` — use backslashes or
+forward slashes, both work with the Azure CLI on Windows:
+
+```powershell
+$env:AZURE_CONFIG_DIR = "$env:USERPROFILE\.azure-profiles\client-a"
+az login
+```
+
 ## One-profile setup
 
 If you only need one Azure login on the machine:

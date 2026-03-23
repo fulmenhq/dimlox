@@ -219,15 +219,7 @@ endif
 
 bootstrap: ## Install dev tools via trust chain: curl → sfetch → goneat → tools
 ifeq ($(WINDOWS_HOST),Windows_NT)
-	@echo "Bootstrap on Windows is semi-manual."
-	@echo "Install or verify these first:"
-	@echo "  - go"
-	@echo "  - git"
-	@echo "  - goneat"
-	@echo "  - sfetch (optional but recommended)"
-	@echo "  - yamllint via: uv tool install yamllint"
-	@echo ""
-	@echo "Then run 'make tools' and 'goneat doctor tools --scope foundation --install --yes --no-cooling' as needed."
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-windows.ps1 bootstrap "$(GONEAT)"
 else
 	@echo "Bootstrapping dimlox development environment..."
 	@echo ""

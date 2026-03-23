@@ -59,6 +59,40 @@ brew install --cask google-cloud-sdk
 gcloud version
 ```
 
+### Windows
+
+Download and run the interactive installer from
+[Google's Cloud SDK install page](https://cloud.google.com/sdk/docs/install#windows).
+The installer adds `gcloud` to PATH and offers to run `gcloud init` at the end.
+
+Alternatives:
+
+```powershell
+scoop bucket add extras
+scoop install gcloud
+```
+
+Or via Chocolatey:
+
+```powershell
+choco install gcloudsdk
+```
+
+After install, close and reopen your terminal, then verify:
+
+```powershell
+gcloud version
+```
+
+The rest of this guide (ADC login, project config, service-based setup) works the
+same on Windows. Environment variables use PowerShell syntax:
+
+```powershell
+$env:GOOGLE_APPLICATION_CREDENTIALS = "C:\path\to\service-account.json"
+$env:GCLOUD_PROJECT = "example-project"
+dimlox doctor --gcp-project example-project
+```
+
 ## User ADC setup
 
 If you are using your own Google user account for local development, the main step is:

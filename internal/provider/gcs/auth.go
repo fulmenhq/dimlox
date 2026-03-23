@@ -124,14 +124,15 @@ func describeCredentialPath(path string) string {
 	if path == "" {
 		return "<redacted>"
 	}
-	home, err := os.UserHomeDir()
+	home, err := effectiveHomeDir()
 	if err == nil && home != "" {
-		prefix := home + string(os.PathSeparator)
-		if path == home {
+		rel, relErr := filepath.Rel(home, path)
+		switch {
+		case relErr != nil:
+		case rel == ".":
 			return "~"
-		}
-		if strings.HasPrefix(path, prefix) {
-			return "~" + string(os.PathSeparator) + strings.TrimPrefix(path, prefix)
+		case rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)):
+			return "~/" + filepath.ToSlash(rel)
 		}
 	}
 	return path
@@ -163,18 +164,30 @@ func quotaProjectForFile(path string) (string, error) {
 }
 
 func defaultADCCredentialsPath() (string, bool) {
-	home, err := os.UserHomeDir()
+	if runtime.GOOS == "windows" {
+		appData := os.Getenv("APPDATA")
+		if appData != "" {
+			return filepath.Join(appData, "gcloud", "application_default_credentials.json"), true
+		}
+		home, err := effectiveHomeDir()
+		if err != nil || home == "" {
+			return "", false
+		}
+		return filepath.Join(home, "AppData", "Roaming", "gcloud", "application_default_credentials.json"), true
+	}
+
+	home, err := effectiveHomeDir()
 	if err != nil || home == "" {
 		return "", false
 	}
-	if runtime.GOOS == "windows" {
-		appData := os.Getenv("APPDATA")
-		if appData == "" {
-			return "", false
-		}
-		return filepath.Join(appData, "gcloud", "application_default_credentials.json"), true
-	}
 	return filepath.Join(home, ".config", "gcloud", "application_default_credentials.json"), true
+}
+
+func effectiveHomeDir() (string, error) {
+	if home := os.Getenv("HOME"); home != "" {
+		return home, nil
+	}
+	return os.UserHomeDir()
 }
 
 func metadataServerAvailable(client *http.Client) bool {

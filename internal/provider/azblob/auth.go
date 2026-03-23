@@ -47,7 +47,7 @@ func azureConfigDir(profile string) (string, error) {
 	if base := os.Getenv("AZURE_PROFILES_DIR"); base != "" {
 		return filepath.Join(base, profile), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := effectiveHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve home dir for az-profile: %w", err)
 	}
@@ -56,6 +56,13 @@ func azureConfigDir(profile string) (string, error) {
 		return preferred, nil
 	}
 	return filepath.Join(home, ".azure", "profiles", profile), nil
+}
+
+func effectiveHomeDir() (string, error) {
+	if home := os.Getenv("HOME"); home != "" {
+		return home, nil
+	}
+	return os.UserHomeDir()
 }
 
 func newCredential(profile string) (azcore.TokenCredential, error) {

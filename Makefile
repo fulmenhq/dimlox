@@ -96,8 +96,19 @@ fmt: ## Format Go source
 vet: ## Run go vet
 	go vet ./...
 
-test: ## Run tests with race detector
-	go test -v -race ./...
+RACE := $(shell go env CGO_ENABLED 2>/dev/null)
+ifeq ($(RACE),1)
+RACE_FLAG := -race
+else
+RACE_FLAG :=
+endif
+
+test: ## Run tests (race detector when CGO_ENABLED=1)
+ifeq ($(GOOS),windows)
+	powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/test-windows.ps1 "$(RACE_FLAG)"
+else
+	go test -v $(RACE_FLAG) ./...
+endif
 
 check: fmt vet test ## fmt + vet + test (full local quality gate)
 	@echo "[ok] All checks passed"

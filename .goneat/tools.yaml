@@ -311,10 +311,14 @@ tools:
     installer_priority:
       darwin: [brew]
       linux: [manual]
-      windows: [scoop]
+      windows: [manual]
     install_commands:
       manual: |
         echo "Run: sudo apt install yamllint"
+      windows: |
+        echo "yamllint is a Python tool. Install via uv (recommended on Windows):"
+        echo "  1. irm https://astral.sh/uv/install.ps1 | iex   # install uv (one-time)"
+        echo "  2. uv tool install yamllint                       # installs yamllint.exe on PATH"
     version_scheme: semver
     minimum_version: 1.33.0
     recommended_version: 1.38.0

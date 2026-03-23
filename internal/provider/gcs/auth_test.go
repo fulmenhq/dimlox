@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -55,16 +56,16 @@ func TestDetectAuthSourceExplicitCredentialsFileDoesNotLeakRawEnvValueOnError(t 
 
 func TestDetectAuthSourceDefaultCredentialsFile(t *testing.T) {
 	home := t.TempDir()
-	adc := filepath.Join(home, ".config", "gcloud", "application_default_credentials.json")
-	if err := os.MkdirAll(filepath.Dir(adc), 0o755); err != nil {
+	adcPath, appData := testADCPath(home)
+	if err := os.MkdirAll(filepath.Dir(adcPath), 0o755); err != nil {
 		t.Fatalf("mkdir adc dir: %v", err)
 	}
-	if err := os.WriteFile(adc, []byte(`{"type":"authorized_user"}`), 0o644); err != nil {
+	if err := os.WriteFile(adcPath, []byte(`{"type":"authorized_user"}`), 0o644); err != nil {
 		t.Fatalf("write adc file: %v", err)
 	}
 	t.Setenv("HOME", home)
 	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-	t.Setenv("APPDATA", "")
+	t.Setenv("APPDATA", appData)
 
 	source, err := detectAuthSource(nil)
 	if err != nil {
@@ -121,22 +122,22 @@ func TestDescribeAuthSourceExplicitCredentialsFileResolvesRelativePathAndBlindsH
 
 func TestDescribeAuthSourceLocalADCIncludesQuotaProject(t *testing.T) {
 	home := t.TempDir()
-	adc := filepath.Join(home, ".config", "gcloud", "application_default_credentials.json")
-	if err := os.MkdirAll(filepath.Dir(adc), 0o755); err != nil {
+	adcPath, appData := testADCPath(home)
+	if err := os.MkdirAll(filepath.Dir(adcPath), 0o755); err != nil {
 		t.Fatalf("mkdir adc dir: %v", err)
 	}
-	if err := os.WriteFile(adc, []byte(`{"type":"authorized_user","quota_project_id":"local-quota"}`), 0o644); err != nil {
+	if err := os.WriteFile(adcPath, []byte(`{"type":"authorized_user","quota_project_id":"local-quota"}`), 0o644); err != nil {
 		t.Fatalf("write adc file: %v", err)
 	}
 	t.Setenv("HOME", home)
 	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-	t.Setenv("APPDATA", "")
+	t.Setenv("APPDATA", appData)
 
 	detail, err := DescribeAuthSource()
 	if err != nil {
 		t.Fatalf("DescribeAuthSource() error = %v", err)
 	}
-	want := "ADC via local ADC file (~/.config/gcloud/application_default_credentials.json), quota-project=local-quota"
+	want := "ADC via local ADC file (" + testADCDisplayPath() + "), quota-project=local-quota"
 	if detail != want {
 		t.Fatalf("DescribeAuthSource() = %q, want %q", detail, want)
 	}
@@ -204,4 +205,19 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+func testADCPath(home string) (path string, appData string) {
+	if runtime.GOOS == "windows" {
+		appData = filepath.Join(home, "AppData", "Roaming")
+		return filepath.Join(appData, "gcloud", "application_default_credentials.json"), appData
+	}
+	return filepath.Join(home, ".config", "gcloud", "application_default_credentials.json"), ""
+}
+
+func testADCDisplayPath() string {
+	if runtime.GOOS == "windows" {
+		return "~/AppData/Roaming/gcloud/application_default_credentials.json"
+	}
+	return "~/.config/gcloud/application_default_credentials.json"
 }

@@ -330,7 +330,6 @@ func midCloud(ctx context.Context, src provider.StorageProvider, rawURI string, 
 	readOffset := offset
 	length := sampleChunkSize
 	if offset > 0 {
-		aligned = false
 		readOffset = offset - 1
 		length++
 		probe, err := src.OpenReader(ctx, rawURI, offset-1, 1)

@@ -386,7 +386,9 @@ func TestBinarySplitUsesFixedReadBuffer(t *testing.T) {
 	fake := &stubSplitProvider{
 		meta: &provider.ObjectMeta{Name: "sample.bin", Size: 10, ContentType: "application/octet-stream"},
 		readerFactory: func(int64, int64) (io.ReadCloser, error) {
-			tracker.Reader.Seek(0, io.SeekStart)
+			if _, err := tracker.Reader.Seek(0, io.SeekStart); err != nil {
+				return nil, err
+			}
 			tracker.maxReadLen = 0
 			return tracker, nil
 		},
@@ -436,7 +438,9 @@ func TestBinarySplitCancelsWithoutLeavingPartFiles(t *testing.T) {
 	fake := &stubSplitProvider{
 		meta: &provider.ObjectMeta{Name: "sample.bin", Size: 8, ContentType: "application/octet-stream"},
 		readerFactory: func(int64, int64) (io.ReadCloser, error) {
-			tracker.Reader.Seek(0, io.SeekStart)
+			if _, err := tracker.Reader.Seek(0, io.SeekStart); err != nil {
+				return nil, err
+			}
 			tracker.fired = false
 			return tracker, nil
 		},

@@ -94,6 +94,9 @@ func printSplit(cmd *cobra.Command, res *split.Result) error {
 	if res.ManifestPath != "" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "manifest: %s\n", res.ManifestPath)
 	}
+	for _, note := range res.Notes {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "note: %s\n", note)
+	}
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "shards: %d\n", len(res.Shards))
 	for _, shard := range res.Shards {
 		payload, err := json.Marshal(shard)

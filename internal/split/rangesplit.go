@@ -55,6 +55,9 @@ func Range(ctx context.Context, rawURI string, src provider.StorageProvider, par
 		HeaderCopied: opts.Header,
 		Detected:     detected,
 	}
+	if opts.DryRun && compressOut {
+		result.Notes = append(result.Notes, compressedDryRunBytesNote)
+	}
 
 	headerLine, offset, err := readRangeHeader(ctx, src, rawURI, meta.Size, opts.Header)
 	if err != nil {
@@ -95,7 +98,7 @@ func Range(ctx context.Context, rawURI string, src provider.StorageProvider, par
 			if dry.empty() {
 				return nil
 			}
-			entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeRange, index, nil, dry)
+			entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeRange, index, compressOut, nil, dry)
 			if err != nil {
 				return err
 			}
@@ -106,7 +109,7 @@ func Range(ctx context.Context, rawURI string, src provider.StorageProvider, par
 		if shard == nil {
 			return nil
 		}
-		entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeRange, index, shard, dryShard{})
+		entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeRange, index, compressOut, shard, dryShard{})
 		if err != nil {
 			return err
 		}

@@ -50,6 +50,9 @@ func Stream(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 		HeaderCopied: opts.Header,
 		Detected:     detected,
 	}
+	if opts.DryRun && compressOut {
+		result.Notes = append(result.Notes, compressedDryRunBytesNote)
+	}
 
 	br := bufio.NewReaderSize(r, splitReadBufferSize)
 	var headerLine []byte
@@ -116,7 +119,7 @@ func Stream(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 		}
 
 		if shouldRotateStreamShard(opts, shard, dry) {
-			entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeStream, index, shard, dry)
+			entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeStream, index, compressOut, shard, dry)
 			if err != nil {
 				return nil, err
 			}
@@ -132,14 +135,14 @@ func Stream(ctx context.Context, rawURI string, src provider.StorageProvider, pa
 
 	if opts.DryRun {
 		if !dry.empty() {
-			entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeStream, index, nil, dry)
+			entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeStream, index, compressOut, nil, dry)
 			if err != nil {
 				return nil, err
 			}
 			result.Shards = append(result.Shards, entry)
 		}
 	} else if shard != nil {
-		entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeStream, index, shard, dryShard{})
+		entry, err := closeTextShard(rawURI, meta, manifest, opts, delimiter, encoding, ModeStream, index, compressOut, shard, dryShard{})
 		if err != nil {
 			return nil, err
 		}
@@ -181,9 +184,16 @@ func shouldRotateStreamShard(opts Options, shard *shardWriter, dry dryShard) boo
 	return false
 }
 
-func closeTextShard(rawURI string, meta *provider.ObjectMeta, manifest *manifestWriter, opts Options, delimiter, encoding string, mode Mode, index int, shard *shardWriter, dry dryShard) (ManifestEntry, error) {
+func closeTextShard(rawURI string, meta *provider.ObjectMeta, manifest *manifestWriter, opts Options, delimiter, encoding string, mode Mode, index int, compressOut bool, shard *shardWriter, dry dryShard) (ManifestEntry, error) {
 	if opts.DryRun {
-		entry := buildManifestEntry(rawURI, meta, opts.OutDir, dry.path, index, shardStats{rows: dry.rows, bytes: dry.bytes}, mode, delimiter, encoding, opts.Header)
+		stats := shardStats{rows: dry.rows}
+		if compressOut {
+			stats.logicalBytes = dry.bytes
+			stats.bytesNote = compressedDryRunBytesNote
+		} else {
+			stats.bytes = dry.bytes
+		}
+		entry := buildManifestEntry(rawURI, meta, opts.OutDir, dry.path, index, stats, mode, delimiter, encoding, opts.Header)
 		if err := manifest.Write(entry); err != nil {
 			return ManifestEntry{}, err
 		}

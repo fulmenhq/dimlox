@@ -172,9 +172,15 @@ dimlox split --dry-run --rows 5000000 --header --out-dir "/tmp/shards" "/tmp/ord
 Dry run behavior:
 
 - prints source, mode, output directory, and manifest path
+- prints operator notes when dry-run cannot predict a value exactly
 - prints one JSON object per planned shard
 - exits `0` on success
 - writes no shard files and no manifest file
+
+For compressed text output, dry-run reports `logical_bytes` instead of pretending
+it knows the final `.gz` shard size. Final compressed bytes depend on data
+compressibility and shard boundaries. If disk sizing matters, run one
+representative shard and measure the resulting `.gz` file.
 
 ## `.part` safety
 
@@ -228,6 +234,20 @@ dimlox split --mode range --rows 1000000 --header --out-dir "/tmp/shards" \
 dimlox split --dry-run --rows 1000000 --header --out-dir "/tmp/shards" \
   "azblob://exampleaccount/example-container/data/orders.psv"
 ```
+
+### Dry-run a compressed split before writing shards
+
+```bash
+dimlox split --dry-run --rows 5000000 --header --out-dir "$HOME/work/shards" \
+  "$HOME/work/price_20240824.psv.gz"
+```
+
+What to expect:
+
+- dry-run still gives you shard count, row distribution, and output names
+- for gzip shard output, `logical_bytes` reflects uncompressed row payload written into each shard plan
+- final `.gz` shard size is not predicted exactly
+- if disk sizing matters, run one representative shard and measure the resulting file
 
 ### Split binary data by size
 

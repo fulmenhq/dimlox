@@ -50,9 +50,12 @@ type Result struct {
 	Delimiter    string                `json:"delimiter,omitempty"`
 	Encoding     string                `json:"encoding,omitempty"`
 	HeaderCopied bool                  `json:"header_copied"`
+	Notes        []string              `json:"notes,omitempty"`
 	Shards       []ManifestEntry       `json:"shards"`
 	Detected     *inspect.DetectResult `json:"detected,omitempty"`
 }
+
+const compressedDryRunBytesNote = "Compressed shard bytes are not predicted in dry-run. Final .gz size depends on data compressibility and shard boundaries; run one representative shard and measure the resulting .gz file if disk sizing matters."
 
 var providerResolver = providers.ForURI
 

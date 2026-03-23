@@ -30,6 +30,16 @@ function Initialize-GoEnv {
     New-Item -ItemType Directory -Force -Path $env:GOTMPDIR | Out-Null
 }
 
+function Initialize-LintEnv {
+    Initialize-GoEnv
+
+    $repoRoot = Get-RepoRoot
+    $tmpRoot = "$repoRoot/.tmp"
+    $env:GOLANGCI_LINT_CACHE = "$tmpRoot/golangci-lint"
+
+    New-Item -ItemType Directory -Force -Path $env:GOLANGCI_LINT_CACHE | Out-Null
+}
+
 function Invoke-Go {
     param(
         [string[]]$GoArgs
@@ -129,6 +139,7 @@ function Invoke-Goneat {
         return $false
     }
 
+    Initialize-LintEnv
     & $GoneatPath $GoneatArgs
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE

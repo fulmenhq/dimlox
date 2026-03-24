@@ -2,6 +2,24 @@
 
 This file keeps the latest 3 release summaries in reverse chronological order.
 
+## v0.1.2
+
+`dimlox` 0.1.2 is the first feature release after the initial public launch.
+It adds multi-file copy workflows, GCS profile support with per-leg auth for
+mixed-identity cloud-to-cloud transfers, package manager distribution, and
+foundry-aligned exit codes.
+
+Highlights:
+
+- Multi-file `cp` with glob expansion, JSONL batch input, positional multi-source, and `--dry-run` planning
+- GCS named profile support (`--gcp-profile`) and per-leg auth for `cp` (`--gcp-creds-file-src/dst`, `--gcp-profile-src/dst`)
+- `doctor --list-gcp-profiles` for local gcloud configuration inspection
+- Homebrew and Scoop install paths with release-automation Makefile targets
+- Exit codes aligned with gofulmen foundry catalog — **breaking**: codes 2/3/4 are now 40/63/33; auth failures return 70
+- Context-cancellation cleanup for downloads, uploads, and `cp` landing files
+
+See `docs/releases/v0.1.2.md` for the full release notes including upgrade guidance.
+
 ## v0.1.1
 
 `dimlox` 0.1.1 is a focused patch release that updates the gRPC dependency used

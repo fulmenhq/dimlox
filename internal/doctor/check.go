@@ -22,7 +22,6 @@ var (
 	probeAzureAuth        = providerazblob.ProbeAuth
 	probeGCSAuth          = providergcs.ProbeAuth
 	describeGCSAuthSource = providergcs.DescribeAuthSource
-	listGCSProfiles       = providergcs.ListProfiles
 	resolveAzureProfile   = providerazblob.ResolveProfile
 	nowFunc               = time.Now
 )

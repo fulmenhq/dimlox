@@ -20,7 +20,7 @@ func buildCopyPlanFromFile(filePath string) (*CopyPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -45,7 +45,7 @@ func buildCopyPlanFromFile(filePath string) (*CopyPlan, error) {
 		if _, err := uri.Parse(entry.Destination); err != nil {
 			return nil, fmt.Errorf("parse %s line %d dst: %w", filePath, lineNo, err)
 		}
-		items = append(items, CopyPlanItem{Source: entry.Source, Destination: entry.Destination})
+		items = append(items, CopyPlanItem(entry))
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err

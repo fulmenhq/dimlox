@@ -26,6 +26,28 @@ custom one-off scripts:
 - Honest comparisons: [`docs/adoption/vs-existing.md`](docs/adoption/vs-existing.md)
 - Workflow recipes: [`docs/adoption/recipes.md`](docs/adoption/recipes.md)
 
+## Install quick start
+
+### Homebrew
+
+```bash
+brew install fulmenhq/tap/dimlox
+```
+
+### Scoop
+
+```bash
+scoop bucket add fulmenhq https://github.com/fulmenhq/scoop-bucket
+scoop install fulmenhq/dimlox
+```
+
+### Direct release download
+
+If you prefer manual installs, download the platform binary plus checksum files
+from the GitHub Releases page:
+
+- `https://github.com/fulmenhq/dimlox/releases`
+
 ## Quick start
 
 ### Download a file
@@ -153,6 +175,19 @@ race testing with `CGO_ENABLED=1`, cross-builds, and native smoke checks on
 Linux and Windows arm64 runners.
 
 ## Install
+
+Package manager installs:
+
+```bash
+brew install fulmenhq/tap/dimlox
+```
+
+```bash
+scoop bucket add fulmenhq https://github.com/fulmenhq/scoop-bucket
+scoop install fulmenhq/dimlox
+```
+
+Local developer install:
 
 ```bash
 make install        # copies binary to ~/.local/bin/dimlox

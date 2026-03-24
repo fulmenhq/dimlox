@@ -79,7 +79,8 @@ endif
         precommit prepush bootstrap tools \
         release-clean release-build release-checksums release-sign release-download \
         release-export-keys release-verify-keys release-verify-checksums release-notes \
-        release-upload release-upload-provenance release-upload-all
+        release-upload release-upload-provenance release-upload-all \
+        update-homebrew-formula update-scoop-manifest
 
 all: build
 
@@ -414,6 +415,30 @@ ifeq ($(WINDOWS_HOST),Windows_NT)
 	Write-Error "Release helper targets are not supported on Windows hosts; use macOS or Linux for release staging."; exit 1
 else
 	./scripts/release-upload.sh "$(RELEASE_TAG)" "$(DIST_RELEASE)"
+endif
+
+update-homebrew-formula: ## Update Homebrew formula in ../homebrew-tap
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Homebrew formula updates are not supported on Windows hosts; use macOS or Linux."; exit 1
+else
+	@if [ ! -d "../homebrew-tap" ]; then \
+		echo "[!!] ../homebrew-tap not found -- clone https://github.com/fulmenhq/homebrew-tap"; \
+		exit 1; \
+	fi
+	@$(MAKE) -C ../homebrew-tap update APP=$(NAME) VERSION=$(VERSION)
+	@echo "[ok] Homebrew formula updated -- review and push from ../homebrew-tap"
+endif
+
+update-scoop-manifest: ## Update Scoop manifest in ../scoop-bucket
+ifeq ($(WINDOWS_HOST),Windows_NT)
+	Write-Error "Scoop manifest updates are not supported from this Makefile on Windows hosts; use macOS or Linux."; exit 1
+else
+	@if [ ! -d "../scoop-bucket" ]; then \
+		echo "[--] ../scoop-bucket not found -- skipping (clone https://github.com/fulmenhq/scoop-bucket)"; \
+	else \
+		$(MAKE) -C ../scoop-bucket update-dimlox VERSION=$(VERSION); \
+		echo "[ok] Scoop manifest updated -- review and push from ../scoop-bucket"; \
+	fi
 endif
 
 # -----------------------------------------------------------------------------

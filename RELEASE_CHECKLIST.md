@@ -77,6 +77,18 @@ export DIMLOX_RELEASE_TAG=vX.Y.Z
 - [ ] Verify binaries, manifests, signatures, and public keys are present
 - [ ] Publish the release
 
+## Package Manager Updates
+
+After the release is published (not draft):
+
+- [ ] `make update-homebrew-formula` (requires `../homebrew-tap` sibling)
+- [ ] Review formula: `cd ../homebrew-tap && git diff Formula/dimlox.rb`
+- [ ] `make update-scoop-manifest` (requires `../scoop-bucket` sibling)
+- [ ] Review manifest: `cd ../scoop-bucket && git diff bucket/dimlox.json`
+
+The tap and bucket teams handle commit, push, and CI validation in their
+respective repos.
+
 ## Post-Release
 
 - [ ] Verify `go install github.com/fulmenhq/dimlox/cmd/dimlox@vX.Y.Z` works

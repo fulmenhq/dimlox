@@ -69,6 +69,16 @@ dimlox inspect --wc "/tmp/orders.psv.gz"
 dimlox split --rows 5000000 --header --manifest --out-dir "/tmp/shards" "/tmp/orders.psv.gz"
 ```
 
+### Copy between two GCS identities when one command needs both
+
+```bash
+dimlox cp \
+  --gcp-profile-src project-a \
+  --gcp-creds-file-dst /path/to/dest-service-account.json \
+  "gs://source-bucket/data/orders.psv" \
+  "gs://dest-bucket/data/orders.psv"
+```
+
 ## Command guide
 
 | Command | Purpose | Usage guide |
@@ -176,16 +186,7 @@ Linux and Windows arm64 runners.
 
 ## Install
 
-Package manager installs:
-
-```bash
-brew install fulmenhq/tap/dimlox
-```
-
-```bash
-scoop bucket add fulmenhq https://github.com/fulmenhq/scoop-bucket
-scoop install fulmenhq/dimlox
-```
+For end-user package-manager installs, use the quick-start commands above.
 
 Local developer install:
 

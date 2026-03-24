@@ -44,6 +44,37 @@ func TestCPDryRunPrintsTransferPlan(t *testing.T) {
 	}
 }
 
+func TestCPDryRunLocalGlobPrintsTransferPlan(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	for _, name := range []string{"orders_a.psv", "orders_b.psv"} {
+		if err := os.WriteFile(filepath.Join(dataDir, name), []byte(name), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q): %v", name, err)
+		}
+	}
+
+	cmd := rootCmd()
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	cmd.SetArgs([]string{"cp", "--dry-run", filepath.Join(dataDir, "orders_*.psv"), filepath.Join(tmp, "out") + "/"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "transfer plan (2 file(s)):") {
+		t.Fatalf("stdout = %q, want transfer plan header", got)
+	}
+}
+
 func TestCPRejectsParallelAboveOne(t *testing.T) {
 	cmd := rootCmd()
 	cmd.SetArgs([]string{"cp", "--parallel", "2", "/tmp/src.txt", "/tmp/dst.txt"})
@@ -68,6 +99,28 @@ func TestCPRejectsMissingPerLegGCSCredentialFileDuringPreflight(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "source GCS auth preflight") {
 		t.Fatalf("err = %v, want source preflight context", err)
+	}
+}
+
+func TestCPSingleFileRegressionStillCopies(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "source.txt")
+	dst := filepath.Join(tmp, "copied.txt")
+	if err := os.WriteFile(src, []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"cp", src, dst})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	data, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", dst, err)
+	}
+	if string(data) != "hello\n" {
+		t.Fatalf("copied data = %q, want hello", string(data))
 	}
 }
 

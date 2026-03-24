@@ -38,8 +38,8 @@ dimlox cp [flags] --from-file <path>
 | `--from-file` | `""` | Read JSONL `src` / `dst` pairs from a file | `dimlox cp --from-file transfers.jsonl` |
 | `--continue-on-error` | `false` | Attempt all planned transfers and report failures at the end | `dimlox cp --continue-on-error --from-file transfers.jsonl` |
 | `--dry-run` | `false` | Print the resolved transfer plan without copying | `dimlox cp --dry-run "gs://example-bucket/data/orders_*.psv" "azblob://exampleaccount/example-container/data/"` |
-| `--max-sources` | `1000` | Fail preflight when glob expansion resolves more than N files | `dimlox cp --max-sources 2500 "gs://example-bucket/data/orders_*.psv" "azblob://exampleaccount/example-container/data/"` |
-| `--parallel` | `1` | Reserved for a future concurrent batch mode; values above `1` are rejected today | `dimlox cp --parallel 1 --from-file transfers.jsonl` |
+| `--max-sources` | `1000` | Fail preflight when glob expansion resolves more than N files; `cp` never truncates the match set silently | `dimlox cp --max-sources 2500 "gs://example-bucket/data/orders_*.psv" "azblob://exampleaccount/example-container/data/"` |
+| `--parallel` | `1` | Reserved for a future concurrent batch mode; values above `1` are rejected today with `--parallel > 1 is not yet supported; see future release notes` | `dimlox cp --parallel 1 --from-file transfers.jsonl` |
 | `--gcp-profile-src` | `""` | Use one named gcloud configuration for GCS source legs | `dimlox cp --gcp-profile-src project-a "gs://source-bucket/data/orders.psv" "gs://dest-bucket/data/orders.psv"` |
 | `--gcp-profile-dst` | `""` | Use one named gcloud configuration for GCS destination legs | `dimlox cp --gcp-profile-dst project-b "gs://source-bucket/data/orders.psv" "gs://dest-bucket/data/orders.psv"` |
 | `--gcp-creds-file-src` | `""` | Use an explicit credentials file for GCS source legs | `dimlox cp --gcp-creds-file-src /path/to/source-sa.json "gs://source-bucket/data/orders.psv" "gs://dest-bucket/data/orders.psv"` |
@@ -60,10 +60,10 @@ dimlox cp [flags] --from-file <path>
 ## Behavior notes
 
 - `cp` is always a two-leg flow: download to landing, then upload from landing
-- `--verify` checks the download leg only
+- `--verify` checks each download leg independently; it is never treated as a batch-level checksum assertion
 - the landing file is removed unless `--keep-landing` is set
 - progress is reported separately for the `get` and `put` legs on `stderr`
-- all multi-file modes use plan -> validate -> execute; bad URIs, collisions, and invalid destinations fail before transfers start
+- all multi-file modes use plan -> validate -> execute; bad URIs, collisions, invalid destinations, and missing credential files fail before transfers start
 - multi-file destinations must end with `/`; trailing `/` is the universal prefix signal for cloud and local targets
 - basename collisions are a hard preflight error; `a/orders.psv` and `b/orders.psv` cannot both map to `dst/orders.psv`
 - glob matching uses provider listing plus client-side `path.Match` filtering over provider-relative object keys

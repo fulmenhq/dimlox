@@ -3,9 +3,15 @@ package inspect
 import (
 	"compress/gzip"
 	"context"
+	"errors"
+	"io"
+	"iter"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/fulmenhq/dimlox/internal/provider"
+	"github.com/fulmenhq/dimlox/internal/uri"
 )
 
 func TestWCLocalText(t *testing.T) {
@@ -52,3 +58,58 @@ func TestWCLocalGzip(t *testing.T) {
 		t.Fatal("Compressed = false, want true")
 	}
 }
+
+func TestWCCancelReturnsContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	oldResolver := providerResolver
+	t.Cleanup(func() { providerResolver = oldResolver })
+
+	providerResolver = func(context.Context, string, ProviderOptions) (provider.StorageProvider, *uri.ParsedURI, error) {
+		return wcCancelProvider{cancel: cancel}, &uri.ParsedURI{Provider: uri.ProviderGCS, GCSBucket: "bucket", GCSObject: "sample.txt"}, nil
+	}
+
+	_, err := WC(ctx, "gs://bucket/sample.txt", ProviderOptions{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("WC() error = %v, want context.Canceled", err)
+	}
+}
+
+type wcCancelProvider struct {
+	cancel context.CancelFunc
+}
+
+func (w wcCancelProvider) Name() string { return "wc-cancel" }
+func (w wcCancelProvider) Stat(context.Context, string) (*provider.ObjectMeta, error) {
+	return &provider.ObjectMeta{Name: "sample.txt", Size: 16, ContentType: "text/plain"}, nil
+}
+func (w wcCancelProvider) List(context.Context, string, provider.ListOptions) iter.Seq2[*provider.ObjectMeta, error] {
+	return func(yield func(*provider.ObjectMeta, error) bool) {}
+}
+func (w wcCancelProvider) OpenReader(ctx context.Context, _ string, _ int64, _ int64) (io.ReadCloser, error) {
+	return &cancelAfterReadCloser{cancel: w.cancel, ctx: ctx}, nil
+}
+func (w wcCancelProvider) DownloadFile(context.Context, string, *os.File, provider.DownloadOptions) error {
+	return nil
+}
+func (w wcCancelProvider) UploadFile(context.Context, *os.File, string, provider.UploadOptions) error {
+	return nil
+}
+
+type cancelAfterReadCloser struct {
+	cancel context.CancelFunc
+	ctx    context.Context
+	fired  bool
+}
+
+func (c *cancelAfterReadCloser) Read(p []byte) (int, error) {
+	if !c.fired {
+		copy(p, []byte("row1\n"))
+		c.fired = true
+		c.cancel()
+		<-c.ctx.Done()
+		return 5, context.Canceled
+	}
+	return 0, context.Canceled
+}
+
+func (c *cancelAfterReadCloser) Close() error { return nil }

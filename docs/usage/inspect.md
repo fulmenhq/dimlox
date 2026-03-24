@@ -92,8 +92,9 @@ dimlox inspect --detect --sample-bytes 131072 "/tmp/orders.psv"
 | Code | Meaning |
 |---|---|
 | `0` | Inspection succeeded |
-| `1` | Operational failure |
-| `2` | Invalid format, missing mode, or unsupported URI |
+| `1` | Generic runtime failure |
+| `40` | Invalid format, missing mode, or unsupported URI |
+| `70` | Authentication failed for the target provider |
 
 ## Related docs
 

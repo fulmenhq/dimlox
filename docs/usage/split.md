@@ -265,9 +265,10 @@ dimlox split --mode binary --bytes 256 --out-dir "/tmp/shards" "/tmp/archive.bin
 | Code | Meaning |
 |---|---|
 | `0` | Split succeeded or dry-run plan succeeded |
-| `1` | Operational failure |
-| `2` | Invalid mode, invalid limits, unsupported URI, or other bad input |
-| `4` | Disk became full while writing shards or manifest |
+| `1` | Generic runtime failure |
+| `33` | Disk became full while writing shards or manifest |
+| `40` | Invalid mode, invalid limits, unsupported URI, or other bad input |
+| `70` | Authentication failed for the source provider |
 
 ## Related docs
 

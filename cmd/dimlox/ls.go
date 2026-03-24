@@ -12,6 +12,7 @@ import (
 	"github.com/fulmenhq/dimlox/internal/provider"
 	"github.com/fulmenhq/dimlox/internal/providers"
 	"github.com/fulmenhq/dimlox/internal/uri"
+	"github.com/fulmenhq/gofulmen/foundry"
 	"github.com/spf13/cobra"
 )
 
@@ -34,16 +35,16 @@ func lsCmd() *cobra.Command {
 			gcpProject := selectedGCPProject(cmd)
 
 			if format != "text" && format != "json" {
-				return withExitCode(exitBadURI, "invalid --format %q (want text|json)", format)
+				return withExitCode(foundry.ExitInvalidArgument, "invalid --format %q (want text|json)", format)
 			}
 
 			p, _, err := providers.ForURI(cmd.Context(), args[0], providers.Options{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile})
 			if err != nil {
 				var unsupported *uri.ErrUnsupportedScheme
 				if errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) {
-					return withExitCode(exitBadURI, "%v", err)
+					return withExitCode(foundry.ExitInvalidArgument, "%v", err)
 				}
-				return withExitCode(exitOperational, "%v", err)
+				return withExitCode(foundry.ExitFailure, "%v", err)
 			}
 
 			objects := p.List(cmd.Context(), args[0], provider.ListOptions{Recursive: recursive, Limit: limit})
@@ -51,10 +52,10 @@ func lsCmd() *cobra.Command {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				for meta, err := range objects {
 					if err != nil {
-						return withExitCode(exitOperational, "%v", err)
+						return withExitCode(foundry.ExitFailure, "%v", err)
 					}
 					if err := enc.Encode(meta); err != nil {
-						return withExitCode(exitOperational, "encode ls result: %v", err)
+						return withExitCode(foundry.ExitFailure, "encode ls result: %v", err)
 					}
 				}
 				return nil
@@ -66,7 +67,7 @@ func lsCmd() *cobra.Command {
 			}
 			for meta, err := range objects {
 				if err != nil {
-					return withExitCode(exitOperational, "%v", err)
+					return withExitCode(foundry.ExitFailure, "%v", err)
 				}
 				writeLSRow(tw, meta, longOutput, showHash)
 			}

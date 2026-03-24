@@ -141,8 +141,9 @@ dimlox doctor "/tmp/orders.psv.gz"
 | Code | Meaning |
 |---|---|
 | `0` | Probe succeeded |
-| `1` | Auth, connectivity, or metadata probe failed |
-| `2` | Unsupported or invalid URI |
+| `1` | Connectivity or metadata probe failed |
+| `40` | Unsupported or invalid URI / arguments |
+| `70` | Authentication or credential setup failed |
 
 ## Troubleshooting
 

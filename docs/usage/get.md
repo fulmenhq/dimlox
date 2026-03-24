@@ -93,10 +93,11 @@ dimlox get --compress "gs://example-bucket/data/orders.psv" "/tmp/orders.psv.gz"
 | Code | Meaning |
 |---|---|
 | `0` | Download succeeded |
-| `1` | Operational failure |
-| `2` | Unsupported or invalid URI |
-| `3` | Checksum mismatch when `--verify` is enabled |
-| `4` | Disk became full while writing |
+| `1` | Generic runtime failure |
+| `33` | Disk became full while writing |
+| `40` | Unsupported or invalid URI / arguments |
+| `63` | Checksum mismatch when `--verify` is enabled |
+| `70` | Authentication failed for the source provider |
 
 ## Related docs
 

@@ -10,10 +10,12 @@ import (
 	"github.com/fulmenhq/dimlox/internal/doctor"
 	providergcs "github.com/fulmenhq/dimlox/internal/provider/gcs"
 	"github.com/fulmenhq/dimlox/internal/uri"
+	"github.com/fulmenhq/gofulmen/foundry"
 	"github.com/spf13/cobra"
 )
 
 var listGCPProfilesFunc = providergcs.ListProfiles
+var doctorRunFunc = doctor.Run
 
 func doctorCmd() *cobra.Command {
 	var listGCPProfiles bool
@@ -24,11 +26,11 @@ func doctorCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if listGCPProfiles {
 				if len(args) != 0 {
-					return withExitCode(exitBadURI, "--list-gcp-profiles does not accept a target URI")
+					return withExitCode(foundry.ExitInvalidArgument, "--list-gcp-profiles does not accept a target URI")
 				}
 				profiles, err := listGCPProfilesFunc()
 				if err != nil {
-					return withExitCode(exitOperational, "%v", err)
+					return withExitCode(foundry.ExitFailure, "%v", err)
 				}
 				printGCPProfiles(cmd, profiles)
 				return nil
@@ -42,7 +44,7 @@ func doctorCmd() *cobra.Command {
 				target = args[0]
 			}
 
-			result, err := doctor.Run(cmd.Context(), target, doctor.Options{
+			result, err := doctorRunFunc(cmd.Context(), target, doctor.Options{
 				AZProfile:  azProfile,
 				GCPProfile: gcpProfile,
 				GCPProject: gcpProject,
@@ -52,11 +54,14 @@ func doctorCmd() *cobra.Command {
 				if target != "" {
 					var unsupported *uri.ErrUnsupportedScheme
 					if strings.TrimSpace(target) == "" || errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) {
-						return withExitCode(exitBadURI, "%v", err)
+						return withExitCode(foundry.ExitInvalidArgument, "%v", err)
 					}
 				}
 				printDoctorResult(cmd, result)
-				return withExitCode(exitOperational, "%v", err)
+				if doctorHasAuthFailure(result) {
+					return withExitCode(foundry.ExitAuthenticationFailed, "%v", err)
+				}
+				return withExitCode(foundry.ExitFailure, "%v", err)
 			}
 
 			printDoctorResult(cmd, result)
@@ -65,6 +70,21 @@ func doctorCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&listGCPProfiles, "list-gcp-profiles", false, "list available gcloud named configurations without making network calls")
 	return cmd
+}
+
+func doctorHasAuthFailure(result *doctor.Result) bool {
+	if result == nil {
+		return false
+	}
+	if result.Status != nil && strings.EqualFold(result.Status.Kind, "auth") {
+		return true
+	}
+	for _, status := range result.Statuses {
+		if strings.EqualFold(status.Kind, "auth") {
+			return true
+		}
+	}
+	return false
 }
 
 func printGCPProfiles(cmd *cobra.Command, report *providergcs.ProfileList) {

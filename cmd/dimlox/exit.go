@@ -7,19 +7,15 @@ import (
 	"strings"
 	"syscall"
 
+	providerazblob "github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	providergcs "github.com/fulmenhq/dimlox/internal/provider/gcs"
+	"github.com/fulmenhq/dimlox/internal/transfer"
 	"github.com/fulmenhq/dimlox/internal/uri"
-)
-
-const (
-	exitSuccess          = 0
-	exitOperational      = 1
-	exitBadURI           = 2
-	exitChecksumMismatch = 3
-	exitDiskFull         = 4
+	"github.com/fulmenhq/gofulmen/foundry"
 )
 
 type exitError struct {
-	code int
+	code foundry.ExitCode
 	err  error
 }
 
@@ -37,7 +33,7 @@ func (e *exitError) Unwrap() error {
 	return e.err
 }
 
-func withExitCode(code int, format string, args ...any) error {
+func withExitCode(code foundry.ExitCode, format string, args ...any) error {
 	if format == "%v" && len(args) == 1 {
 		if err, ok := args[0].(error); ok {
 			return &exitError{code: code, err: err}
@@ -46,21 +42,30 @@ func withExitCode(code int, format string, args ...any) error {
 	return &exitError{code: code, err: fmt.Errorf(format, args...)}
 }
 
-func exitCodeFor(err error) int {
+func exitCodeFor(err error) foundry.ExitCode {
 	if err == nil {
-		return exitSuccess
+		return foundry.ExitSuccess
 	}
+	// Priority chain for phase 1 DIM-004 alignment:
+	// 1) disk full, 2) checksum mismatch, 3) auth, 4) bad input,
+	// 5) explicit exitError wrapper, 6) generic failure.
 	if isDiskFullError(err) {
-		return exitDiskFull
+		return foundry.ExitResourceExhausted
+	}
+	if errors.Is(err, transfer.ErrChecksumMismatch) {
+		return foundry.ExitDataCorrupt
+	}
+	if isAuthError(err) {
+		return foundry.ExitAuthenticationFailed
 	}
 	if isBadInputError(err) {
-		return exitBadURI
+		return foundry.ExitInvalidArgument
 	}
 	var ee *exitError
 	if errors.As(err, &ee) {
 		return ee.code
 	}
-	return exitOperational
+	return foundry.ExitFailure
 }
 
 func isBadInputError(err error) bool {
@@ -68,7 +73,7 @@ func isBadInputError(err error) bool {
 		return false
 	}
 	var unsupported *uri.ErrUnsupportedScheme
-	if errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) {
+	if errors.Is(err, uri.ErrEmptyURI) || errors.Is(err, providergcs.ErrProfileNotFound) || errors.As(err, &unsupported) {
 		return true
 	}
 	msg := err.Error()
@@ -92,6 +97,37 @@ func isBadInputError(err error) bool {
 	return false
 }
 
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, providergcs.ErrADCMissing) {
+		return true
+	}
+	var authFailed *providerazblob.AuthenticationFailedError
+	if errors.As(err, &authFailed) {
+		return true
+	}
+	var authRequired *providerazblob.AuthenticationRequiredError
+	if errors.As(err, &authRequired) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"defaultazurecredential",
+		"azureclicredential",
+		"please run 'az login'",
+		"please run \"az login\"",
+		"application default credentials",
+		"google_application_credentials",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func isDiskFullError(err error) bool {
 	if err == nil {
 		return false
@@ -104,7 +140,7 @@ func isDiskFullError(err error) bool {
 
 func exitWithError(err error) {
 	if err == nil {
-		os.Exit(exitSuccess)
+		os.Exit(foundry.ExitSuccess)
 	}
 	_, _ = fmt.Fprintf(os.Stderr, "dimlox: %v\n", err)
 	os.Exit(exitCodeFor(err))

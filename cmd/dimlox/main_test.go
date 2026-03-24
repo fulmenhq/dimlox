@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/fulmenhq/dimlox/internal/doctor"
+	providergcs "github.com/fulmenhq/dimlox/internal/provider/gcs"
+	"github.com/fulmenhq/gofulmen/foundry"
 )
 
 func TestRootVersionFlag(t *testing.T) {
@@ -123,8 +125,8 @@ func TestDoctorBadURIExitCode(t *testing.T) {
 	if !errors.As(err, &ee) {
 		t.Fatalf("Execute() error = %T, want *exitError", err)
 	}
-	if ee.code != exitBadURI {
-		t.Fatalf("exit code = %d, want %d", ee.code, exitBadURI)
+	if ee.code != foundry.ExitInvalidArgument {
+		t.Fatalf("exit code = %d, want %d", ee.code, foundry.ExitInvalidArgument)
 	}
 }
 
@@ -136,8 +138,8 @@ func TestGetMissingArgsExitCode(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() error = nil, want error")
 	}
-	if got := exitCodeFor(err); got != exitBadURI {
-		t.Fatalf("exitCodeFor(get missing args) = %d, want %d (err=%v)", got, exitBadURI, err)
+	if got := exitCodeFor(err); got != foundry.ExitInvalidArgument {
+		t.Fatalf("exitCodeFor(get missing args) = %d, want %d (err=%v)", got, foundry.ExitInvalidArgument, err)
 	}
 }
 
@@ -153,15 +155,22 @@ func TestSplitInvalidLimitsExitCode(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() error = nil, want error")
 	}
-	if got := exitCodeFor(err); got != exitBadURI {
-		t.Fatalf("exitCodeFor(split invalid limits) = %d, want %d (err=%v)", got, exitBadURI, err)
+	if got := exitCodeFor(err); got != foundry.ExitInvalidArgument {
+		t.Fatalf("exitCodeFor(split invalid limits) = %d, want %d (err=%v)", got, foundry.ExitInvalidArgument, err)
 	}
 }
 
 func TestExitCodeForDiskFull(t *testing.T) {
-	err := withExitCode(exitOperational, "%v", &os.PathError{Op: "write", Path: "/tmp/out", Err: syscall.ENOSPC})
-	if got := exitCodeFor(err); got != exitDiskFull {
-		t.Fatalf("exitCodeFor(disk full) = %d, want %d", got, exitDiskFull)
+	err := withExitCode(foundry.ExitFailure, "%v", &os.PathError{Op: "write", Path: "/tmp/out", Err: syscall.ENOSPC})
+	if got := exitCodeFor(err); got != foundry.ExitResourceExhausted {
+		t.Fatalf("exitCodeFor(disk full) = %d, want %d", got, foundry.ExitResourceExhausted)
+	}
+}
+
+func TestExitCodeForAuthFailure(t *testing.T) {
+	err := withExitCode(foundry.ExitFailure, "%v", providergcs.ErrADCMissing)
+	if got := exitCodeFor(err); got != foundry.ExitAuthenticationFailed {
+		t.Fatalf("exitCodeFor(auth failure) = %d, want %d", got, foundry.ExitAuthenticationFailed)
 	}
 }
 

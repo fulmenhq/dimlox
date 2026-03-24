@@ -3,6 +3,13 @@
 All notable changes to `dimlox` are summarized here in reverse chronological order.
 This file keeps the latest 10 release entries.
 
+## v0.1.1
+
+Patch release for public-release readiness.
+
+- Updated `google.golang.org/grpc` to `v1.79.3` to pick up the fix for `GHSA-p77j-4mvh-x3m3`
+- Re-ran the Go quality gates and vulnerability checks before the follow-up release
+
 ## v0.1.0
 
 Initial public release.

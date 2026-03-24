@@ -40,12 +40,19 @@ dimlox cp [flags] --from-file <path>
 | `--dry-run` | `false` | Print the resolved transfer plan without copying | `dimlox cp --dry-run "gs://example-bucket/data/orders_*.psv" "azblob://exampleaccount/example-container/data/"` |
 | `--max-sources` | `1000` | Fail preflight when glob expansion resolves more than N files | `dimlox cp --max-sources 2500 "gs://example-bucket/data/orders_*.psv" "azblob://exampleaccount/example-container/data/"` |
 | `--parallel` | `1` | Reserved for a future concurrent batch mode; values above `1` are rejected today | `dimlox cp --parallel 1 --from-file transfers.jsonl` |
+| `--gcp-profile-src` | `""` | Use one named gcloud configuration for GCS source legs | `dimlox cp --gcp-profile-src project-a "gs://source-bucket/data/orders.psv" "gs://dest-bucket/data/orders.psv"` |
+| `--gcp-profile-dst` | `""` | Use one named gcloud configuration for GCS destination legs | `dimlox cp --gcp-profile-dst project-b "gs://source-bucket/data/orders.psv" "gs://dest-bucket/data/orders.psv"` |
+| `--gcp-creds-file-src` | `""` | Use an explicit credentials file for GCS source legs | `dimlox cp --gcp-creds-file-src /path/to/source-sa.json "gs://source-bucket/data/orders.psv" "gs://dest-bucket/data/orders.psv"` |
+| `--gcp-creds-file-dst` | `""` | Use an explicit credentials file for GCS destination legs | `dimlox cp --gcp-creds-file-dst /path/to/dest-sa.json "gs://source-bucket/data/orders.psv" "gs://dest-bucket/data/orders.psv"` |
+| `--gcp-project-src` | `""` | Override the GCP project for GCS source legs | `dimlox cp --gcp-project-src source-project "gs://source-bucket/data/orders.psv" "gs://dest-bucket/data/orders.psv"` |
+| `--gcp-project-dst` | `""` | Override the GCP project for GCS destination legs | `dimlox cp --gcp-project-dst dest-project "gs://source-bucket/data/orders.psv" "gs://dest-bucket/data/orders.psv"` |
 
 ### Common flags
 
 | Flag | Default | What it does | Example |
 |---|---|---|---|
 | `--az-profile` | `""` | Select the Azure CLI profile for Azure endpoints in the copy | `dimlox cp --az-profile client-a "gs://example-bucket/data/orders.psv" "azblob://exampleaccount/example-container/data/orders.psv"` |
+| `--gcp-profile` | `""` | Select one named gcloud configuration for all GCS endpoints in the copy | `dimlox cp --gcp-profile project-a "gs://example-bucket/data/orders.psv" "azblob://exampleaccount/example-container/data/orders.psv"` |
 | `--gcp-project` | `GCLOUD_PROJECT` / `GOOGLE_CLOUD_PROJECT` / `""` | Provide a requester-pays project for GCS endpoints in the copy | `dimlox cp --gcp-project example-project "gs://example-bucket/data/orders.psv" "azblob://exampleaccount/example-container/data/orders.psv"` |
 | `--landing` | `DIMLOX_LANDING_DIR` / `""` | Choose where the intermediate file is written | `dimlox cp --landing "/tmp/dimlox" "gs://example-bucket/data/orders.psv" "azblob://exampleaccount/example-container/data/orders.psv"` |
 | `--log-level` | effective `info` | Set CLI log verbosity | `dimlox cp --log-level debug "gs://example-bucket/data/orders.psv" "azblob://exampleaccount/example-container/data/orders.psv"` |
@@ -60,6 +67,8 @@ dimlox cp [flags] --from-file <path>
 - multi-file destinations must end with `/`; trailing `/` is the universal prefix signal for cloud and local targets
 - basename collisions are a hard preflight error; `a/orders.psv` and `b/orders.psv` cannot both map to `dst/orders.psv`
 - glob matching uses provider listing plus client-side `path.Match` filtering over provider-relative object keys
+- GCS auth is resolved per endpoint; `--gcp-profile-src`, `--gcp-creds-file-src`, `--gcp-profile-dst`, and `--gcp-creds-file-dst` override the global GCS settings for their leg only
+- a named gcloud profile changes identity only when its config sets `credential_file_override`; otherwise it only contributes project and account context
 
 ## Examples
 
@@ -139,6 +148,38 @@ Notes:
 - comments starting with `#` or `//` are ignored
 - the file is fully validated before any transfers begin
 - duplicate destination paths fail preflight
+
+### Copy between two GCS endpoints with different identities
+
+```bash
+dimlox cp \
+  --gcp-profile-src project-a \
+  --gcp-creds-file-dst /path/to/dest-service-account.json \
+  "gs://source-bucket/data/orders.psv" \
+  "gs://dest-bucket/data/orders.psv"
+```
+
+What to expect:
+
+- the source leg resolves credentials from `project-a`
+- the destination leg uses the explicit credential file instead of the global ADC context
+- both legs still execute sequentially through the landing area
+
+### Copy between two GCS endpoints with different GAC files
+
+```bash
+dimlox cp \
+  --gcp-creds-file-src /path/to/source-sa.json \
+  --gcp-creds-file-dst /path/to/dest-sa.json \
+  "gs://source-bucket/data/orders.psv" \
+  "gs://dest-bucket/data/orders.psv"
+```
+
+What to expect:
+
+- each GCS leg resolves its own credential file before client construction
+- explicit per-leg credential files override global `--gcp-profile`, `--gcp-project`, and process ADC for that leg
+- this is the supported way to handle source and destination buckets that require different enterprise-provided identities
 
 ### Keep the landing file for a later retry or inspection
 

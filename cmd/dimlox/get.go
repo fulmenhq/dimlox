@@ -22,14 +22,15 @@ func getCmd() *cobra.Command {
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			azProfile, _ := cmd.Flags().GetString("az-profile")
-			gcpProject, _ := cmd.Flags().GetString("gcp-project")
+			gcpProfile, _ := cmd.Flags().GetString("gcp-profile")
+			gcpProject := selectedGCPProject(cmd)
 			landingDir, _ := cmd.Flags().GetString("landing")
 			dst := ""
 			if len(args) == 2 {
 				dst = args[1]
 			}
 			_, err := transfer.Download(cmd.Context(), args[0], transfer.DownloadOptions{
-				ProviderOptions: transfer.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject},
+				ProviderOptions: transfer.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile},
 				DestinationPath: dst,
 				LandingDir:      landingDir,
 				BlockSize:       mbToBytes(blockMB),

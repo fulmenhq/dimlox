@@ -8,18 +8,34 @@ import (
 	"time"
 
 	"github.com/fulmenhq/dimlox/internal/doctor"
+	providergcs "github.com/fulmenhq/dimlox/internal/provider/gcs"
 	"github.com/fulmenhq/dimlox/internal/uri"
 	"github.com/spf13/cobra"
 )
 
+var listGCPProfilesFunc = providergcs.ListProfiles
+
 func doctorCmd() *cobra.Command {
+	var listGCPProfiles bool
 	cmd := &cobra.Command{
 		Use:   "doctor [uri]",
 		Short: "Check auth, connectivity, and metadata probes for configured providers",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if listGCPProfiles {
+				if len(args) != 0 {
+					return withExitCode(exitBadURI, "--list-gcp-profiles does not accept a target URI")
+				}
+				profiles, err := listGCPProfilesFunc()
+				if err != nil {
+					return withExitCode(exitOperational, "%v", err)
+				}
+				printGCPProfiles(cmd, profiles)
+				return nil
+			}
 			azProfile, _ := cmd.Flags().GetString("az-profile")
-			gcpProject, _ := cmd.Flags().GetString("gcp-project")
+			gcpProfile, _ := cmd.Flags().GetString("gcp-profile")
+			gcpProject := selectedGCPProject(cmd)
 
 			target := ""
 			if len(args) == 1 {
@@ -28,6 +44,7 @@ func doctorCmd() *cobra.Command {
 
 			result, err := doctor.Run(cmd.Context(), target, doctor.Options{
 				AZProfile:  azProfile,
+				GCPProfile: gcpProfile,
 				GCPProject: gcpProject,
 				Version:    formatVersion(),
 			})
@@ -46,7 +63,37 @@ func doctorCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&listGCPProfiles, "list-gcp-profiles", false, "list available gcloud named configurations without making network calls")
 	return cmd
+}
+
+func printGCPProfiles(cmd *cobra.Command, report *providergcs.ProfileList) {
+	if report == nil {
+		return
+	}
+	configDir := report.ConfigDir
+	if configDir == "" {
+		configDir = "<unknown>"
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "gcp profiles (from %s/configurations/):\n", configDir)
+	if len(report.Profiles) == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "  <none>")
+		return
+	}
+	for _, profile := range report.Profiles {
+		line := fmt.Sprintf("  %-14s account=%s  project=%s", profile.Name, emptyProfileField(profile.Account), emptyProfileField(profile.Project))
+		if profile.CredentialFileOverride != "" {
+			line += fmt.Sprintf("  credential_file_override=%s", profile.CredentialFileOverride)
+		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
+	}
+}
+
+func emptyProfileField(value string) string {
+	if value == "" {
+		return "<none>"
+	}
+	return value
 }
 
 func printDoctorResult(cmd *cobra.Command, result *doctor.Result) {

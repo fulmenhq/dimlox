@@ -80,6 +80,24 @@ Why this recipe works:
 - `--dry-run` shows the exact source -> destination mapping before any transfer begins
 - the batch still uses the same landing-based copy path as single-file `cp`
 
+## Copy between two GCS identities in one command
+
+Use this when the source and destination buckets need different GCS identities.
+
+```bash
+dimlox cp \
+  --gcp-profile-src project-a \
+  --gcp-creds-file-dst /path/to/dest-service-account.json \
+  "gs://source-bucket/data/orders.psv" \
+  "gs://dest-bucket/data/orders.psv"
+```
+
+Why this recipe works:
+
+- the source and destination legs resolve GCS auth independently
+- the destination credential file can come directly from an enterprise-provided ADC artifact
+- the copy still runs through the same landing-based two-leg workflow, so verification and retry behavior stay familiar
+
 ## Handle compressed cloud data safely
 
 Use this when the source is a remote gzip file and you need more than a quick head sample.

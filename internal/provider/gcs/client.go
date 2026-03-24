@@ -17,6 +17,7 @@ import (
 	"github.com/fulmenhq/dimlox/internal/uri"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
 )
 
 type Provider struct {
@@ -24,12 +25,23 @@ type Provider struct {
 	gcpProject string
 }
 
-func NewGCSProvider(ctx context.Context, gcpProject string) (*Provider, error) {
-	client, err := storageapi.NewClient(ctx)
+func NewGCSProvider(ctx context.Context, opts Options) (*Provider, error) {
+	resolved, err := ResolveOptions(opts)
 	if err != nil {
 		return nil, err
 	}
-	return &Provider{client: client, gcpProject: gcpProject}, nil
+	clientOpts := make([]option.ClientOption, 0, 1)
+	if resolved.CredsFile != "" {
+		clientOpts = append(clientOpts, option.WithCredentialsFile(resolved.CredsFile))
+	}
+	client, err := storageapi.NewClient(ctx, clientOpts...)
+	if err != nil {
+		return nil, err
+	}
+	if err := LogProfileContext(ctx, opts); err != nil {
+		return nil, err
+	}
+	return &Provider{client: client, gcpProject: resolved.Project}, nil
 }
 
 func (p *Provider) Name() string {

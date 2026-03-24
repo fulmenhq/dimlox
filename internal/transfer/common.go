@@ -50,12 +50,31 @@ type UploadOptions struct {
 
 type CopyOptions struct {
 	ProviderOptions
-	LandingDir  string
-	BlockSize   int64
-	Concurrency int
-	Compress    bool
-	KeepLanding bool
-	Verify      bool
+	SourceProviderOptions      ProviderOptions
+	DestinationProviderOptions ProviderOptions
+	LandingDir                 string
+	BlockSize                  int64
+	Concurrency                int
+	Compress                   bool
+	KeepLanding                bool
+	Verify                     bool
+}
+
+func mergeProviderOptions(base, override ProviderOptions) ProviderOptions {
+	merged := base
+	if override.AZProfile != "" {
+		merged.AZProfile = override.AZProfile
+	}
+	if override.GCPProject != "" {
+		merged.GCPProject = override.GCPProject
+	}
+	if override.GCPProfile != "" {
+		merged.GCPProfile = override.GCPProfile
+	}
+	if override.GCPCredsFile != "" {
+		merged.GCPCredsFile = override.GCPCredsFile
+	}
+	return merged
 }
 
 var providerResolver = providers.ForURI

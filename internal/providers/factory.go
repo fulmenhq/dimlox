@@ -12,8 +12,10 @@ import (
 )
 
 type Options struct {
-	AZProfile  string
-	GCPProject string
+	AZProfile    string
+	GCPProject   string
+	GCPProfile   string
+	GCPCredsFile string
 }
 
 func ForURI(ctx context.Context, rawURI string, opts Options) (provider.StorageProvider, *uri.ParsedURI, error) {
@@ -30,7 +32,11 @@ func ForURI(ctx context.Context, rawURI string, opts Options) (provider.StorageP
 		}
 		return p, parsed, nil
 	case uri.ProviderGCS:
-		p, err := providergcs.NewGCSProvider(ctx, opts.GCPProject)
+		p, err := providergcs.NewGCSProvider(ctx, providergcs.Options{
+			Project:   opts.GCPProject,
+			Profile:   opts.GCPProfile,
+			CredsFile: opts.GCPCredsFile,
+		})
 		if err != nil {
 			return nil, nil, err
 		}

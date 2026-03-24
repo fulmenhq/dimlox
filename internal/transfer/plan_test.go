@@ -66,6 +66,70 @@ func TestBuildCopyPlanFromFileSkipsComments(t *testing.T) {
 	}
 }
 
+func TestBuildCopyPlanFromFileMalformedJSONIncludesPathAndLine(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "transfers.jsonl")
+	if err := os.WriteFile(file, []byte("{\"src\":\"gs://bucket/a.txt\",\"dst\":\"azblob://acct/container/a.txt\"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := BuildCopyPlan(context.Background(), nil, CopyPlanOptions{FromFile: file})
+	if err == nil {
+		t.Fatal("BuildCopyPlan() error = nil, want malformed JSON error")
+	}
+	if !strings.Contains(err.Error(), file) || !strings.Contains(err.Error(), "line 1") {
+		t.Fatalf("error = %q, want file path and line number", err)
+	}
+}
+
+func TestBuildCopyPlanFromFileUnknownFieldsRejected(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "transfers.jsonl")
+	content := `{"src":"gs://bucket/a.txt","dst":"azblob://acct/container/a.txt","extra":"nope"}` + "\n"
+	if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := BuildCopyPlan(context.Background(), nil, CopyPlanOptions{FromFile: file})
+	if err == nil {
+		t.Fatal("BuildCopyPlan() error = nil, want unknown-field error")
+	}
+	if !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("error = %q, want unknown field detail", err)
+	}
+}
+
+func TestBuildCopyPlanFromFileDuplicateDestinationRejected(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "transfers.jsonl")
+	content := strings.Join([]string{
+		`{"src":"gs://bucket/a.txt","dst":"azblob://acct/container/a.txt"}`,
+		`{"src":"gs://bucket/b.txt","dst":"azblob://acct/container/a.txt"}`,
+	}, "\n")
+	if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := BuildCopyPlan(context.Background(), nil, CopyPlanOptions{FromFile: file})
+	if err == nil || !strings.Contains(err.Error(), "destination collision") {
+		t.Fatalf("BuildCopyPlan() error = %v, want destination collision", err)
+	}
+}
+
+func TestBuildCopyPlanFromFileEmptyRejected(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "transfers.jsonl")
+	content := strings.Join([]string{"# comment", "", "// comment"}, "\n")
+	if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := BuildCopyPlan(context.Background(), nil, CopyPlanOptions{FromFile: file})
+	if err == nil || !strings.Contains(err.Error(), "contained no transfer entries") {
+		t.Fatalf("BuildCopyPlan() error = %v, want empty-file error", err)
+	}
+}
+
 func TestBuildCopyPlanGlobExpandsMatches(t *testing.T) {
 	origResolver := providerResolver
 	t.Cleanup(func() { providerResolver = origResolver })
@@ -133,6 +197,84 @@ func TestBuildCopyPlanGlobUsesSourceProviderOptions(t *testing.T) {
 	}
 }
 
+func TestBuildCopyPlanMaxSourcesLimitExceeded(t *testing.T) {
+	origResolver := providerResolver
+	t.Cleanup(func() { providerResolver = origResolver })
+
+	providerResolver = func(context.Context, string, providers.Options) (provider.StorageProvider, *uri.ParsedURI, error) {
+		return fakeListProvider{items: []*provider.ObjectMeta{
+			{URI: "gcs://bucket/data/orders_2024.psv", Name: "data/orders_2024.psv"},
+			{URI: "gcs://bucket/data/orders_2025.psv", Name: "data/orders_2025.psv"},
+		}}, &uri.ParsedURI{Provider: uri.ProviderGCS, GCSBucket: "bucket", GCSObject: "data/orders_*.psv"}, nil
+	}
+
+	_, err := BuildCopyPlan(context.Background(), []string{"gs://bucket/data/orders_*.psv", "azblob://acct/container/out/"}, CopyPlanOptions{MaxSources: 1})
+	if err == nil || !strings.Contains(err.Error(), "--max-sources=1") {
+		t.Fatalf("BuildCopyPlan() error = %v, want max-sources error", err)
+	}
+}
+
+func TestBuildCopyPlanGlobNoMatches(t *testing.T) {
+	origResolver := providerResolver
+	t.Cleanup(func() { providerResolver = origResolver })
+
+	providerResolver = func(context.Context, string, providers.Options) (provider.StorageProvider, *uri.ParsedURI, error) {
+		return fakeListProvider{items: []*provider.ObjectMeta{{URI: "gcs://bucket/data/ignore.txt", Name: "data/ignore.txt"}}}, &uri.ParsedURI{Provider: uri.ProviderGCS, GCSBucket: "bucket", GCSObject: "data/orders_*.psv"}, nil
+	}
+
+	_, err := BuildCopyPlan(context.Background(), []string{"gs://bucket/data/orders_*.psv", "azblob://acct/container/out/"}, CopyPlanOptions{MaxSources: 10})
+	if err == nil || !strings.Contains(err.Error(), "matched no files") {
+		t.Fatalf("BuildCopyPlan() error = %v, want no-match error", err)
+	}
+}
+
+func TestBuildCopyPlanGlobRejectsBucketWildcard(t *testing.T) {
+	_, err := BuildCopyPlan(context.Background(), []string{"gs://buck*/data/orders.psv", "/tmp/out/"}, CopyPlanOptions{MaxSources: 10})
+	if err == nil || !strings.Contains(err.Error(), "only supported in object paths") {
+		t.Fatalf("BuildCopyPlan() error = %v, want bucket wildcard rejection", err)
+	}
+}
+
+func TestBuildCopyPlanLocalGlobExpansion(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	for _, name := range []string{"orders_a.psv", "orders_b.psv", "ignore.txt"} {
+		if err := os.WriteFile(filepath.Join(dataDir, name), []byte(name), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q): %v", name, err)
+		}
+	}
+
+	plan, err := BuildCopyPlan(context.Background(), []string{filepath.Join(dataDir, "orders_*.psv"), filepath.Join(tmp, "out") + "/"}, CopyPlanOptions{MaxSources: 10})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+	if len(plan.Items) != 2 {
+		t.Fatalf("len(plan.Items) = %d, want 2", len(plan.Items))
+	}
+	if !strings.HasSuffix(plan.Items[0].Destination, "/orders_a.psv") || !strings.HasSuffix(plan.Items[1].Destination, "/orders_b.psv") {
+		t.Fatalf("destinations = %#v, want basename mapping for local glob", plan.Items)
+	}
+}
+
+func TestBuildCopyPlanPositionalSourcesRequireTrailingSlashOnDestination(t *testing.T) {
+	tmp := t.TempDir()
+	src1 := filepath.Join(tmp, "alpha.txt")
+	src2 := filepath.Join(tmp, "bravo.txt")
+	for _, file := range []string{src1, src2} {
+		if err := os.WriteFile(file, []byte(filepath.Base(file)), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q): %v", file, err)
+		}
+	}
+
+	_, err := BuildCopyPlan(context.Background(), []string{src1, src2, filepath.Join(tmp, "out")}, CopyPlanOptions{})
+	if err == nil || !strings.Contains(err.Error(), "must end with /") {
+		t.Fatalf("BuildCopyPlan() error = %v, want trailing slash error", err)
+	}
+}
+
 func TestExecuteCopyPlanContinueOnError(t *testing.T) {
 	tmp := t.TempDir()
 	src1 := filepath.Join(tmp, "ok.txt")
@@ -170,6 +312,46 @@ func TestExecuteCopyPlanContinueOnError(t *testing.T) {
 	}
 	if string(data) != "alpha\n" {
 		t.Fatalf("ok.txt = %q, want alpha", string(data))
+	}
+}
+
+func TestExecuteCopyPlanFailFastReportsSkippedCount(t *testing.T) {
+	tmp := t.TempDir()
+	src1 := filepath.Join(tmp, "ok.txt")
+	if err := os.WriteFile(src1, []byte("alpha\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	missing := filepath.Join(tmp, "missing.txt")
+	third := filepath.Join(tmp, "third.txt")
+	if err := os.WriteFile(third, []byte("charlie\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	dstDir := filepath.Join(tmp, "out")
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	plan := &CopyPlan{Items: []CopyPlanItem{
+		{Source: src1, Destination: filepath.Join(dstDir, "ok.txt")},
+		{Source: missing, Destination: filepath.Join(dstDir, "missing.txt")},
+		{Source: third, Destination: filepath.Join(dstDir, "third.txt")},
+	}}
+	stderr := new(bytes.Buffer)
+	result, err := ExecuteCopyPlan(context.Background(), plan, ExecuteCopyPlanOptions{
+		CopyOptions:   CopyOptions{LandingDir: filepath.Join(tmp, "landing")},
+		SummaryWriter: stderr,
+	})
+	if err == nil {
+		t.Fatal("ExecuteCopyPlan() error = nil, want failure")
+	}
+	if result.Transferred != 1 || result.Failed != 1 || result.Skipped != 1 {
+		t.Fatalf("result = %+v, want transferred=1 failed=1 skipped=1", result)
+	}
+	if !strings.Contains(stderr.String(), "cp summary: transferred=1 failed=1 skipped=1") {
+		t.Fatalf("summary = %q, want fail-fast batch summary", stderr.String())
+	}
+	if _, statErr := os.Stat(filepath.Join(dstDir, "third.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("third transfer executed unexpectedly; stat err=%v", statErr)
 	}
 }
 

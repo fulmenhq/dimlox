@@ -80,6 +80,27 @@ Why this recipe works:
 - `--dry-run` shows the exact source -> destination mapping before any transfer begins
 - the batch still uses the same landing-based copy path as single-file `cp`
 
+## JSONL batch copy from a reviewed transfer list
+
+Use this when a migration plan has already been reviewed and you want the copy
+inputs to stay explicit instead of relying on glob expansion.
+
+```bash
+cat > /tmp/transfers.jsonl <<'EOF'
+{"src":"gs://example-bucket/data/orders_2024.psv","dst":"azblob://exampleaccount/example-container/archive/orders_2024.psv"}
+{"src":"gs://example-bucket/data/orders_2025.psv","dst":"azblob://exampleaccount/example-container/archive/orders_2025.psv"}
+EOF
+
+dimlox cp --dry-run --from-file /tmp/transfers.jsonl
+dimlox cp --continue-on-error --from-file /tmp/transfers.jsonl
+```
+
+Why this recipe works:
+
+- the JSONL file is validated before any transfer starts
+- duplicate destination paths fail preflight instead of half-completing a batch
+- `--continue-on-error` keeps going across independent files while still returning the worst failure class at the end
+
 ## Copy between two GCS identities in one command
 
 Use this when the source and destination buckets need different GCS identities.

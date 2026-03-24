@@ -62,6 +62,24 @@ Why this recipe works:
 - `--landing` makes disk usage predictable
 - the follow-up `doctor` confirms the destination object is visible
 
+## Batch copy with a dry-run plan first
+
+Use this when a migration involves a whole run of similarly named files and you
+want `dimlox` to resolve the batch for you.
+
+```bash
+dimlox cp --dry-run "gs://example-bucket/data/orders_*.psv" \
+  "azblob://exampleaccount/example-container/archive/"
+dimlox cp "gs://example-bucket/data/orders_*.psv" \
+  "azblob://exampleaccount/example-container/archive/"
+```
+
+Why this recipe works:
+
+- the quoted glob is expanded by `dimlox`, not by your local shell
+- `--dry-run` shows the exact source -> destination mapping before any transfer begins
+- the batch still uses the same landing-based copy path as single-file `cp`
+
 ## Handle compressed cloud data safely
 
 Use this when the source is a remote gzip file and you need more than a quick head sample.

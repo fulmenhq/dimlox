@@ -73,10 +73,14 @@ SFETCH  = $(shell [ -x "$(BIN_DIR)/sfetch" ]  && echo "$(BIN_DIR)/sfetch"  || co
 GONEAT  = $(shell [ -x "$(BIN_DIR)/goneat" ]  && echo "$(BIN_DIR)/goneat"  || command -v goneat  2>/dev/null)
 endif
 
-.PHONY: all help build build-all build-windows test test-short check fmt vet lint assess \
-        install install-path clean version version-check version-set \
-        version-patch version-minor version-major \
+# checkmake: all targets must be declared PHONY (no file outputs)
+.PHONY: all help \
+        build build-all build-windows \
+        test test-short check fmt vet lint assess \
         precommit prepush bootstrap tools \
+        install install-path clean \
+        version version-check version-set \
+        version-patch version-minor version-major \
         release-clean release-build release-checksums release-sign release-download \
         release-export-keys release-verify-keys release-verify-checksums release-notes \
         release-upload release-upload-provenance release-upload-all \

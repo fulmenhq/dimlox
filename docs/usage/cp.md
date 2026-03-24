@@ -1,8 +1,8 @@
 # cp
 
-`dimlox cp` copies data between providers through a local landing file. It is the
-safe cross-provider path when you need one reproducible command instead of a
-download script plus a separate upload step.
+`dimlox cp` copies data between providers through a local landing file. It now
+supports single-file copies, positional multi-source copies, glob expansion, and
+JSONL-driven transfer batches.
 
 ## Quick start
 
@@ -12,10 +12,16 @@ dimlox cp --landing "/tmp/dimlox" \
   "azblob://exampleaccount/example-container/data/orders.psv"
 ```
 
+```bash
+dimlox cp --dry-run "gs://example-bucket/data/orders_*.psv" \
+  "azblob://exampleaccount/example-container/data/"
+```
+
 ## Usage
 
 ```bash
-dimlox cp <src-uri> <dst-uri>
+dimlox cp [flags] <src-uri>... <dst-uri>
+dimlox cp [flags] --from-file <path>
 ```
 
 ## Flags
@@ -29,6 +35,11 @@ dimlox cp <src-uri> <dst-uri>
 | `--compress` | `false` | Gzip-compress uncompressed text in landing before upload | `dimlox cp --compress "gs://example-bucket/data/orders.psv" "azblob://exampleaccount/example-container/data/orders.psv.gz"` |
 | `--keep-landing` | `false` | Keep the intermediate landing file after upload | `dimlox cp --keep-landing --landing "/tmp/dimlox" "gs://example-bucket/data/orders.psv" "azblob://exampleaccount/example-container/data/orders.psv"` |
 | `--verify` | `false` | Verify checksum metadata on the download leg | `dimlox cp --verify "gs://example-bucket/data/orders.psv" "azblob://exampleaccount/example-container/data/orders.psv"` |
+| `--from-file` | `""` | Read JSONL `src` / `dst` pairs from a file | `dimlox cp --from-file transfers.jsonl` |
+| `--continue-on-error` | `false` | Attempt all planned transfers and report failures at the end | `dimlox cp --continue-on-error --from-file transfers.jsonl` |
+| `--dry-run` | `false` | Print the resolved transfer plan without copying | `dimlox cp --dry-run "gs://example-bucket/data/orders_*.psv" "azblob://exampleaccount/example-container/data/"` |
+| `--max-sources` | `1000` | Fail preflight when glob expansion resolves more than N files | `dimlox cp --max-sources 2500 "gs://example-bucket/data/orders_*.psv" "azblob://exampleaccount/example-container/data/"` |
+| `--parallel` | `1` | Reserved for a future concurrent batch mode; values above `1` are rejected today | `dimlox cp --parallel 1 --from-file transfers.jsonl` |
 
 ### Common flags
 
@@ -45,6 +56,10 @@ dimlox cp <src-uri> <dst-uri>
 - `--verify` checks the download leg only
 - the landing file is removed unless `--keep-landing` is set
 - progress is reported separately for the `get` and `put` legs on `stderr`
+- all multi-file modes use plan -> validate -> execute; bad URIs, collisions, and invalid destinations fail before transfers start
+- multi-file destinations must end with `/`; trailing `/` is the universal prefix signal for cloud and local targets
+- basename collisions are a hard preflight error; `a/orders.psv` and `b/orders.psv` cannot both map to `dst/orders.psv`
+- glob matching uses provider listing plus client-side `path.Match` filtering over provider-relative object keys
 
 ## Examples
 
@@ -77,6 +92,53 @@ What to expect:
 
 This is the normal cross-cloud path today. It is intentionally a local
 staging flow, not a direct provider-to-provider stream.
+
+### Copy multiple explicit sources into one destination prefix
+
+```bash
+dimlox cp \
+  "gs://example-bucket/data/orders_2024.psv" \
+  "gs://example-bucket/data/orders_2025.psv" \
+  "azblob://exampleaccount/example-container/archive/"
+```
+
+What to expect:
+
+- the trailing `/` on the destination tells `dimlox` to map each source by basename
+- each file is transferred sequentially through the normal landing flow
+- `cp` prints a completion summary after the batch finishes
+
+### Expand a glob on the source provider
+
+```bash
+dimlox cp --dry-run "gs://example-bucket/data/orders_*.psv" \
+  "azblob://exampleaccount/example-container/archive/"
+```
+
+What to expect:
+
+- quote the source so your shell does not expand it locally
+- `dimlox` lists a bounded prefix on the source provider, then filters matches client-side
+- `--dry-run` prints the full source -> destination plan before you move data
+
+### Run a JSONL batch file
+
+```bash
+dimlox cp --continue-on-error --from-file transfers.jsonl
+```
+
+Example JSONL input:
+
+```json
+{"src":"gs://example-bucket/data/orders_2024.psv","dst":"azblob://exampleaccount/example-container/archive/orders_2024.psv"}
+{"src":"azblob://exampleaccount/example-container/data/orders_2025.psv","dst":"/tmp/orders_2025.psv"}
+```
+
+Notes:
+
+- comments starting with `#` or `//` are ignored
+- the file is fully validated before any transfers begin
+- duplicate destination paths fail preflight
 
 ### Keep the landing file for a later retry or inspection
 

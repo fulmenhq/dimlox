@@ -2,9 +2,13 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"testing"
 
+	"github.com/fulmenhq/dimlox/internal/doctor"
 	providergcs "github.com/fulmenhq/dimlox/internal/provider/gcs"
+	"github.com/fulmenhq/gofulmen/foundry"
 )
 
 func TestDoctorListGCPProfilesOutputsLocalProfiles(t *testing.T) {
@@ -40,5 +44,40 @@ func TestDoctorListGCPProfilesOutputsLocalProfiles(t *testing.T) {
 	}
 	if !bytes.Contains(stdout.Bytes(), []byte("project-a")) || !bytes.Contains(stdout.Bytes(), []byte("credential_file_override=/tmp/project-a.json")) {
 		t.Fatalf("stdout = %q, want profile details", got)
+	}
+}
+
+func TestDoctorListGCPProfilesRejectsTargetURI(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"doctor", "--list-gcp-profiles", "gs://bucket/object"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want error")
+	}
+	if got := exitCodeFor(err); got != foundry.ExitInvalidArgument {
+		t.Fatalf("exitCodeFor(doctor --list-gcp-profiles uri) = %d, want %d", got, foundry.ExitInvalidArgument)
+	}
+}
+
+func TestDoctorAuthFailureUsesAuthenticationExitCode(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"doctor"})
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+
+	origRun := doctorRunFunc
+	t.Cleanup(func() { doctorRunFunc = origRun })
+	doctorRunFunc = func(_ context.Context, _ string, _ doctor.Options) (*doctor.Result, error) {
+		return &doctor.Result{Statuses: []doctor.Status{{Provider: "gcs", OK: false, Kind: "auth", Detail: "adc missing"}}}, errors.New("doctor checks failed")
+	}
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want error")
+	}
+	if got := exitCodeFor(err); got != foundry.ExitAuthenticationFailed {
+		t.Fatalf("exitCodeFor(doctor auth failure) = %d, want %d", got, foundry.ExitAuthenticationFailed)
 	}
 }

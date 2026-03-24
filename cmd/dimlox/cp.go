@@ -7,6 +7,7 @@ import (
 	providergcs "github.com/fulmenhq/dimlox/internal/provider/gcs"
 	"github.com/fulmenhq/dimlox/internal/transfer"
 	"github.com/fulmenhq/dimlox/internal/uri"
+	"github.com/fulmenhq/gofulmen/foundry"
 	"github.com/spf13/cobra"
 )
 
@@ -35,19 +36,19 @@ func cpCmd() *cobra.Command {
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if fromFile != "" && len(args) != 0 {
-				return withExitCode(exitBadURI, "--from-file cannot be combined with positional source or destination arguments")
+				return withExitCode(foundry.ExitInvalidArgument, "--from-file cannot be combined with positional source or destination arguments")
 			}
 			if fromFile == "" && len(args) < 2 {
-				return withExitCode(exitBadURI, "cp requires at least one source and one destination")
+				return withExitCode(foundry.ExitInvalidArgument, "cp requires at least one source and one destination")
 			}
 			if parallel < 1 {
-				return withExitCode(exitBadURI, "--parallel must be >= 1")
+				return withExitCode(foundry.ExitInvalidArgument, "--parallel must be >= 1")
 			}
 			if parallel > 1 {
-				return withExitCode(exitBadURI, "--parallel > 1 is not yet supported; see future release notes")
+				return withExitCode(foundry.ExitInvalidArgument, "--parallel > 1 is not yet supported; see future release notes")
 			}
 			if maxSources < 1 {
-				return withExitCode(exitBadURI, "--max-sources must be >= 1")
+				return withExitCode(foundry.ExitInvalidArgument, "--max-sources must be >= 1")
 			}
 
 			azProfile, _ := cmd.Flags().GetString("az-profile")
@@ -77,18 +78,18 @@ func cpCmd() *cobra.Command {
 				MaxSources:            maxSources,
 			})
 			if err != nil {
-				return withExitCode(exitBadURI, "%v", err)
+				return withExitCode(foundry.ExitInvalidArgument, "%v", err)
 			}
 			if err := validateGCSLegSelections(plan, srcProviderOptions, dstProviderOptions); err != nil {
-				return withExitCode(exitBadURI, "%v", err)
+				return withExitCode(foundry.ExitInvalidArgument, "%v", err)
 			}
 			if dryRun {
 				if err := transfer.WriteCopyPlan(cmd.OutOrStdout(), plan); err != nil {
-					return withExitCode(exitOperational, "%v", err)
+					return withExitCode(foundry.ExitFailure, "%v", err)
 				}
 				return nil
 			}
-			_, err = transfer.ExecuteCopyPlan(cmd.Context(), plan, transfer.ExecuteCopyPlanOptions{
+			result, err := transfer.ExecuteCopyPlan(cmd.Context(), plan, transfer.ExecuteCopyPlanOptions{
 				CopyOptions: transfer.CopyOptions{
 					ProviderOptions:            transfer.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile},
 					SourceProviderOptions:      srcProviderOptions,
@@ -104,14 +105,17 @@ func cpCmd() *cobra.Command {
 				SummaryWriter:   cmd.ErrOrStderr(),
 			})
 			if err != nil {
+				if continueOnError && result != nil && len(result.Errors) > 0 {
+					return withExitCode(worstBatchExitCode(result.Errors), "%v", err)
+				}
 				if errors.Is(err, transfer.ErrChecksumMismatch) {
-					return withExitCode(exitChecksumMismatch, "%v", err)
+					return withExitCode(foundry.ExitDataCorrupt, "%v", err)
 				}
 				var unsupported *uri.ErrUnsupportedScheme
 				if errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) {
-					return withExitCode(exitBadURI, "%v", err)
+					return withExitCode(foundry.ExitInvalidArgument, "%v", err)
 				}
-				return withExitCode(exitOperational, "%v", err)
+				return withExitCode(foundry.ExitFailure, "%v", err)
 			}
 			return nil
 		},
@@ -133,6 +137,35 @@ func cpCmd() *cobra.Command {
 	cmd.Flags().StringVar(&gcpProjectSrc, "gcp-project-src", "", "GCP project for GCS source legs")
 	cmd.Flags().StringVar(&gcpProjectDst, "gcp-project-dst", "", "GCP project for GCS destination legs")
 	return cmd
+}
+
+func worstBatchExitCode(errs []error) foundry.ExitCode {
+	worst := foundry.ExitFailure
+	worstRank := batchExitRank(worst)
+	for _, err := range errs {
+		code := exitCodeFor(err)
+		rank := batchExitRank(code)
+		if rank > worstRank {
+			worst = code
+			worstRank = rank
+		}
+	}
+	return worst
+}
+
+func batchExitRank(code foundry.ExitCode) int {
+	switch code {
+	case foundry.ExitAuthenticationFailed:
+		return 4
+	case foundry.ExitDataCorrupt:
+		return 3
+	case foundry.ExitResourceExhausted:
+		return 2
+	case foundry.ExitFailure:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func validateGCSLegSelections(plan *transfer.CopyPlan, srcOpts, dstOpts transfer.ProviderOptions) error {

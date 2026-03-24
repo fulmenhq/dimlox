@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fulmenhq/gofulmen/foundry"
 )
 
 func TestCPDryRunPrintsTransferPlan(t *testing.T) {
@@ -48,8 +51,8 @@ func TestCPRejectsParallelAboveOne(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() error = nil, want error")
 	}
-	if got := exitCodeFor(err); got != exitBadURI {
-		t.Fatalf("exitCodeFor(cp --parallel 2) = %d, want %d (err=%v)", got, exitBadURI, err)
+	if got := exitCodeFor(err); got != foundry.ExitInvalidArgument {
+		t.Fatalf("exitCodeFor(cp --parallel 2) = %d, want %d (err=%v)", got, foundry.ExitInvalidArgument, err)
 	}
 }
 
@@ -60,10 +63,25 @@ func TestCPRejectsMissingPerLegGCSCredentialFileDuringPreflight(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() error = nil, want error")
 	}
-	if got := exitCodeFor(err); got != exitBadURI {
-		t.Fatalf("exitCodeFor(cp missing gcs creds) = %d, want %d (err=%v)", got, exitBadURI, err)
+	if got := exitCodeFor(err); got != foundry.ExitInvalidArgument {
+		t.Fatalf("exitCodeFor(cp missing gcs creds) = %d, want %d (err=%v)", got, foundry.ExitInvalidArgument, err)
 	}
 	if !strings.Contains(err.Error(), "source GCS auth preflight") {
 		t.Fatalf("err = %v, want source preflight context", err)
 	}
 }
+
+func TestWorstBatchExitCodePrefersAuthOverDataAndDisk(t *testing.T) {
+	errs := []error{
+		withExitCode(foundry.ExitFailure, "%v", contextCanceledErr{}),
+		withExitCode(foundry.ExitDataCorrupt, "%v", errors.New("checksum mismatch")),
+		withExitCode(foundry.ExitAuthenticationFailed, "%v", errors.New("auth failed")),
+	}
+	if got := worstBatchExitCode(errs); got != foundry.ExitAuthenticationFailed {
+		t.Fatalf("worstBatchExitCode() = %d, want %d", got, foundry.ExitAuthenticationFailed)
+	}
+}
+
+type contextCanceledErr struct{}
+
+func (contextCanceledErr) Error() string { return "context canceled" }

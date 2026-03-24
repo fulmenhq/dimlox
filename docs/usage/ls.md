@@ -68,7 +68,8 @@ dimlox ls --format json --limit 5 "gs://example-bucket/data/"
 |---|---|
 | `0` | Listing succeeded |
 | `1` | Provider or filesystem listing failed |
-| `2` | Invalid format or unsupported URI |
+| `40` | Invalid format or unsupported URI |
+| `70` | Authentication failed for the target provider |
 
 ## Related docs
 

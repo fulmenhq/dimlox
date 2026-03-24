@@ -7,6 +7,7 @@ import (
 
 	"github.com/fulmenhq/dimlox/internal/inspect"
 	"github.com/fulmenhq/dimlox/internal/uri"
+	"github.com/fulmenhq/gofulmen/foundry"
 	"github.com/spf13/cobra"
 )
 
@@ -31,14 +32,14 @@ func inspectCmd() *cobra.Command {
 			gcpProfile, _ := cmd.Flags().GetString("gcp-profile")
 			gcpProject := selectedGCPProject(cmd)
 			if format != "text" && format != "json" {
-				return withExitCode(exitBadURI, "invalid --format %q (want text|json)", format)
+				return withExitCode(foundry.ExitInvalidArgument, "invalid --format %q (want text|json)", format)
 			}
 			handleErr := func(err error) error {
 				var unsupported *uri.ErrUnsupportedScheme
 				if errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) {
-					return withExitCode(exitBadURI, "%v", err)
+					return withExitCode(foundry.ExitInvalidArgument, "%v", err)
 				}
-				return withExitCode(exitOperational, "%v", err)
+				return withExitCode(foundry.ExitFailure, "%v", err)
 			}
 			switch {
 			case wcFlag:
@@ -82,7 +83,7 @@ func inspectCmd() *cobra.Command {
 				}
 				return printDetect(cmd, res, format)
 			default:
-				return withExitCode(exitBadURI, "inspect requires one of --wc, --head, --mid, --tail, or --detect")
+				return withExitCode(foundry.ExitInvalidArgument, "inspect requires one of --wc, --head, --mid, --tail, or --detect")
 			}
 		},
 	}

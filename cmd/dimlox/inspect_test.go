@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/fulmenhq/dimlox/internal/inspect"
+	"github.com/fulmenhq/gofulmen/foundry"
 )
 
 func TestInspectWCJSON(t *testing.T) {
@@ -52,8 +53,8 @@ func TestInspectRequiresMode(t *testing.T) {
 	if !strings.Contains(err.Error(), "inspect requires one of") {
 		t.Fatalf("error = %q, want inspect mode guidance", err.Error())
 	}
-	if got := exitCodeFor(err); got != exitBadURI {
-		t.Fatalf("exitCodeFor(inspect missing mode) = %d, want %d", got, exitBadURI)
+	if got := exitCodeFor(err); got != foundry.ExitInvalidArgument {
+		t.Fatalf("exitCodeFor(inspect missing mode) = %d, want %d", got, foundry.ExitInvalidArgument)
 	}
 }
 
@@ -69,8 +70,8 @@ func TestInspectInvalidFormatExitCode(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() error = nil, want error")
 	}
-	if got := exitCodeFor(err); got != exitBadURI {
-		t.Fatalf("exitCodeFor(inspect invalid format) = %d, want %d", got, exitBadURI)
+	if got := exitCodeFor(err); got != foundry.ExitInvalidArgument {
+		t.Fatalf("exitCodeFor(inspect invalid format) = %d, want %d", got, foundry.ExitInvalidArgument)
 	}
 }
 

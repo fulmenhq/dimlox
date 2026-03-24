@@ -39,6 +39,7 @@ type ExecuteCopyPlanResult struct {
 	Transferred int
 	Failed      int
 	Skipped     int
+	Errors      []error
 }
 
 func BuildCopyPlan(ctx context.Context, args []string, opts CopyPlanOptions) (*CopyPlan, error) {
@@ -103,7 +104,9 @@ func ExecuteCopyPlan(ctx context.Context, plan *CopyPlan, opts ExecuteCopyPlanOp
 		_, err := Copy(ctx, item.Source, item.Destination, opts.CopyOptions)
 		if err != nil {
 			result.Failed++
-			failures = append(failures, fmt.Errorf("%s -> %s: %w", item.Source, item.Destination, err))
+			transferErr := fmt.Errorf("%s -> %s: %w", item.Source, item.Destination, err)
+			failures = append(failures, transferErr)
+			result.Errors = append(result.Errors, transferErr)
 			if !opts.ContinueOnError {
 				result.Skipped = len(plan.Items) - result.Transferred - result.Failed
 				printCopySummary(opts.SummaryWriter, len(plan.Items), result)

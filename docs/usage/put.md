@@ -62,9 +62,10 @@ dimlox put --compress --landing "/tmp/dimlox" \
 | Code | Meaning |
 |---|---|
 | `0` | Upload succeeded |
-| `1` | Operational failure |
-| `2` | Unsupported or invalid URI |
-| `4` | Disk became full while creating a staged upload artifact |
+| `1` | Generic runtime failure |
+| `33` | Disk became full while creating a staged upload artifact |
+| `40` | Unsupported or invalid URI / arguments |
+| `70` | Authentication failed for the destination provider |
 
 ## Related docs
 

@@ -3,9 +3,13 @@ package transfer
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/fulmenhq/dimlox/internal/provider"
 )
+
+var verifyDownloadedFile = verifyFile
+var finalizeDownloadedOutput = finalizeOutput
 
 type DownloadResult struct {
 	Destination string
@@ -37,7 +41,16 @@ func Download(ctx context.Context, srcURI string, opts DownloadOptions) (*Downlo
 	if err != nil {
 		return nil, err
 	}
-	defer dst.Close()
+	closed := false
+	cleanupTemp := true
+	defer func() {
+		if !closed {
+			_ = dst.Close()
+		}
+		if cleanupTemp {
+			_ = os.Remove(tempPath)
+		}
+	}()
 	reporter := newProgressReporter("get", meta.Size)
 	reporter.Start()
 	defer reporter.Finish()
@@ -53,17 +66,19 @@ func Download(ctx context.Context, srcURI string, opts DownloadOptions) (*Downlo
 	if err != nil {
 		return nil, err
 	}
-	if err := dst.Close(); err != nil {
+	if err = dst.Close(); err != nil {
 		return nil, err
 	}
+	closed = true
 	if opts.Verify && !compress {
-		if err := verifyFile(tempPath, meta); err != nil {
+		if err = verifyDownloadedFile(tempPath, meta); err != nil {
 			return nil, err
 		}
 	}
-	if err := finalizeOutput(tempPath, destination, opts.Overwrite); err != nil {
+	if err = finalizeDownloadedOutput(tempPath, destination, opts.Overwrite); err != nil {
 		return nil, err
 	}
+	cleanupTemp = false
 	return &DownloadResult{Destination: destination, Meta: meta}, nil
 }
 

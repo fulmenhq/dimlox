@@ -31,6 +31,11 @@ func Copy(ctx context.Context, srcURI, dstURI string, opts CopyOptions) (*CopyRe
 		return nil, err
 	}
 	landingPath := getResult.Destination
+	if !opts.KeepLanding {
+		defer func() {
+			_ = os.Remove(landingPath)
+		}()
+	}
 	if _, err := Upload(ctx, UploadOptions{
 		ProviderOptions: dstProviderOptions,
 		SourcePath:      landingPath,
@@ -39,9 +44,6 @@ func Copy(ctx context.Context, srcURI, dstURI string, opts CopyOptions) (*CopyRe
 		Concurrency:     opts.Concurrency,
 	}); err != nil {
 		return nil, err
-	}
-	if !opts.KeepLanding {
-		_ = os.Remove(landingPath)
 	}
 	return &CopyResult{LandingPath: filepath.Clean(landingPath), Target: dstURI}, nil
 }

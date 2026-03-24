@@ -7,6 +7,7 @@ import (
 
 	"github.com/fulmenhq/dimlox/internal/split"
 	"github.com/fulmenhq/dimlox/internal/uri"
+	"github.com/fulmenhq/gofulmen/foundry"
 	"github.com/spf13/cobra"
 )
 
@@ -35,9 +36,9 @@ func splitCmd() *cobra.Command {
 			handleErr := func(err error) error {
 				var unsupported *uri.ErrUnsupportedScheme
 				if errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) || isBadInputError(err) {
-					return withExitCode(exitBadURI, "%v", err)
+					return withExitCode(foundry.ExitInvalidArgument, "%v", err)
 				}
-				return withExitCode(exitOperational, "%v", err)
+				return withExitCode(foundry.ExitFailure, "%v", err)
 			}
 			res, err := split.Split(cmd.Context(), args[0], split.Options{
 				ProviderOptions: split.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile},

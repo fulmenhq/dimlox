@@ -194,10 +194,15 @@ dimlox cp --keep-landing --landing "/tmp/dimlox" \
 | Code | Meaning |
 |---|---|
 | `0` | Copy succeeded |
-| `1` | Operational failure |
-| `2` | Unsupported or invalid URI |
-| `3` | Checksum mismatch when `--verify` is enabled |
-| `4` | Disk became full while staging the landing file |
+| `1` | Generic runtime failure |
+| `33` | Disk became full while staging the landing file |
+| `40` | Unsupported or invalid URI / arguments |
+| `63` | Checksum mismatch when `--verify` is enabled |
+| `70` | Authentication failed for one of the providers |
+
+When `--continue-on-error` is enabled, the batch returns the worst failure class
+seen during the run: auth (`70`) > data corrupt (`63`) > resource exhausted
+(`33`) > generic failure (`1`).
 
 ## Related docs
 

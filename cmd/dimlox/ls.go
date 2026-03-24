@@ -30,13 +30,14 @@ func lsCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			azProfile, _ := cmd.Flags().GetString("az-profile")
-			gcpProject, _ := cmd.Flags().GetString("gcp-project")
+			gcpProfile, _ := cmd.Flags().GetString("gcp-profile")
+			gcpProject := selectedGCPProject(cmd)
 
 			if format != "text" && format != "json" {
 				return withExitCode(exitBadURI, "invalid --format %q (want text|json)", format)
 			}
 
-			p, _, err := providers.ForURI(cmd.Context(), args[0], providers.Options{AZProfile: azProfile, GCPProject: gcpProject})
+			p, _, err := providers.ForURI(cmd.Context(), args[0], providers.Options{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile})
 			if err != nil {
 				var unsupported *uri.ErrUnsupportedScheme
 				if errors.Is(err, uri.ErrEmptyURI) || errors.As(err, &unsupported) {

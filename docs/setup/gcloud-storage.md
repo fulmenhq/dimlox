@@ -194,9 +194,9 @@ dimlox doctor --gcp-project <project-id>
 ```
 
 This works well for `dimlox` because the Google client libraries read
-`GOOGLE_APPLICATION_CREDENTIALS` directly. There is no separate `dimlox` flag for
-credential-file selection right now; the active identity is whichever ADC source is
-currently exposed in the environment.
+`GOOGLE_APPLICATION_CREDENTIALS` directly. `dimlox` now also supports
+`--gcp-profile` plus per-leg `cp` credential flags when one command needs to
+touch different GCS identities.
 
 ### Pattern 3: separate shell wrappers or env files
 
@@ -225,6 +225,75 @@ One practical rule:
 
 For developers switching back and forth, a tiny shell helper or env file is often
 safer than trying to remember the current state by hand.
+
+## Named gcloud profiles in dimlox
+
+`dimlox` supports `--gcp-profile <name>` for commands that talk to GCS.
+
+Example:
+
+```bash
+dimlox doctor --gcp-profile project-a
+dimlox ls --gcp-profile project-a gs://example-bucket/
+```
+
+Important rule:
+
+- a named gcloud profile changes identity only when its config includes `auth/credential_file_override`
+- otherwise the profile contributes project/account context, but the underlying ADC identity stays whatever your process environment or default ADC file already provides
+
+That distinction matters because `gcloud config configurations` and ADC are not
+the same mechanism.
+
+You can inspect the local profiles with:
+
+```bash
+dimlox doctor --list-gcp-profiles
+```
+
+Look for `credential_file_override` in the output to see which profiles are
+identity-selecting versus context-only.
+
+## Per-leg GCS auth for cp
+
+`dimlox cp` resolves GCS auth per endpoint. This is the main workflow for cloud
+to cloud copy when source and destination need different identities.
+
+### Profile on one leg, explicit credentials on the other
+
+```bash
+dimlox cp \
+  --gcp-profile-src project-a \
+  --gcp-creds-file-dst /path/to/dest-service-account.json \
+  "gs://source-bucket/data/orders.psv" \
+  "gs://dest-bucket/data/orders.psv"
+```
+
+### Different credential files on both legs
+
+```bash
+dimlox cp \
+  --gcp-creds-file-src /path/to/source-sa.json \
+  --gcp-creds-file-dst /path/to/dest-sa.json \
+  "gs://source-bucket/data/orders.psv" \
+  "gs://dest-bucket/data/orders.psv"
+```
+
+Per-leg precedence for `cp` is:
+
+1. `--gcp-creds-file-src` / `--gcp-creds-file-dst`
+2. `--gcp-profile-src` / `--gcp-profile-dst`
+3. global `--gcp-profile`
+4. process `GOOGLE_APPLICATION_CREDENTIALS`
+5. default ADC / metadata server
+
+Per-leg project precedence is:
+
+1. `--gcp-project-src` / `--gcp-project-dst`
+2. global `--gcp-project`
+3. profile `core/project`
+4. `GCLOUD_PROJECT`
+5. `GOOGLE_CLOUD_PROJECT`
 
 ## Project handling
 

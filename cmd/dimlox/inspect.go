@@ -28,7 +28,8 @@ func inspectCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			azProfile, _ := cmd.Flags().GetString("az-profile")
-			gcpProject, _ := cmd.Flags().GetString("gcp-project")
+			gcpProfile, _ := cmd.Flags().GetString("gcp-profile")
+			gcpProject := selectedGCPProject(cmd)
 			if format != "text" && format != "json" {
 				return withExitCode(exitBadURI, "invalid --format %q (want text|json)", format)
 			}
@@ -41,41 +42,41 @@ func inspectCmd() *cobra.Command {
 			}
 			switch {
 			case wcFlag:
-				res, err := inspect.WC(cmd.Context(), args[0], inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
+				res, err := inspect.WC(cmd.Context(), args[0], inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile})
 				if err != nil {
 					return handleErr(err)
 				}
 				return printWC(cmd, res, format)
 			case headN > 0:
-				res, err := inspect.Head(cmd.Context(), args[0], headN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
+				res, err := inspect.Head(cmd.Context(), args[0], headN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile})
 				if err != nil {
 					return handleErr(err)
 				}
 				return printSample(cmd, res, format)
 			case midN > 0:
 				if !forceStream {
-					if err := inspect.RefuseCompressedCloudSample(cmd.Context(), args[0], inspect.SampleMid, midN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject}); err != nil {
+					if err := inspect.RefuseCompressedCloudSample(cmd.Context(), args[0], inspect.SampleMid, midN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile}); err != nil {
 						return handleErr(err)
 					}
 				}
-				res, err := inspect.Mid(cmd.Context(), args[0], midN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
+				res, err := inspect.Mid(cmd.Context(), args[0], midN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile})
 				if err != nil {
 					return handleErr(err)
 				}
 				return printSample(cmd, res, format)
 			case tailN > 0:
 				if !forceStream {
-					if err := inspect.RefuseCompressedCloudSample(cmd.Context(), args[0], inspect.SampleTail, tailN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject}); err != nil {
+					if err := inspect.RefuseCompressedCloudSample(cmd.Context(), args[0], inspect.SampleTail, tailN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile}); err != nil {
 						return handleErr(err)
 					}
 				}
-				res, err := inspect.Tail(cmd.Context(), args[0], tailN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
+				res, err := inspect.Tail(cmd.Context(), args[0], tailN, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile})
 				if err != nil {
 					return handleErr(err)
 				}
 				return printSample(cmd, res, format)
 			case detectFlag:
-				res, err := inspect.Detect(cmd.Context(), args[0], sampleBytes, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject})
+				res, err := inspect.Detect(cmd.Context(), args[0], sampleBytes, inspect.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile})
 				if err != nil {
 					return handleErr(err)
 				}

@@ -24,8 +24,9 @@ type CopyPlanItem struct {
 
 type CopyPlanOptions struct {
 	ProviderOptions
-	FromFile   string
-	MaxSources int
+	SourceProviderOptions ProviderOptions
+	FromFile              string
+	MaxSources            int
 }
 
 type ExecuteCopyPlanOptions struct {
@@ -127,13 +128,14 @@ type resolvedSource struct {
 
 func resolveSources(ctx context.Context, srcArgs []string, opts CopyPlanOptions) ([]resolvedSource, error) {
 	resolved := make([]resolvedSource, 0, len(srcArgs))
+	sourceProviderOptions := mergeProviderOptions(opts.ProviderOptions, opts.SourceProviderOptions)
 	for _, src := range srcArgs {
 		if hasGlobMeta(src) {
 			remaining := opts.MaxSources - len(resolved)
 			if opts.MaxSources > 0 && remaining <= 0 {
 				return nil, fmt.Errorf("glob source expansion exceeded --max-sources=%d", opts.MaxSources)
 			}
-			matches, err := expandGlob(ctx, src, opts.ProviderOptions, remaining)
+			matches, err := expandGlob(ctx, src, sourceProviderOptions, remaining)
 			if err != nil {
 				return nil, err
 			}

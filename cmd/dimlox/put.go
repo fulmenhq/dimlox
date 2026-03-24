@@ -21,10 +21,11 @@ func putCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			azProfile, _ := cmd.Flags().GetString("az-profile")
-			gcpProject, _ := cmd.Flags().GetString("gcp-project")
+			gcpProfile, _ := cmd.Flags().GetString("gcp-profile")
+			gcpProject := selectedGCPProject(cmd)
 			landingDir, _ := cmd.Flags().GetString("landing")
 			_, err := transfer.Upload(cmd.Context(), transfer.UploadOptions{
-				ProviderOptions: transfer.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject},
+				ProviderOptions: transfer.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile},
 				SourcePath:      args[0],
 				Destination:     args[1],
 				BlockSize:       mbToBytes(blockMB),

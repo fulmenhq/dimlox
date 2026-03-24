@@ -230,14 +230,14 @@ func TestProbeGCSIncludesTokenValidity(t *testing.T) {
 
 	now := time.Date(2026, 3, 22, 15, 0, 0, 0, time.UTC)
 	nowFunc = func() time.Time { return now }
-	probeGCSAuth = func(context.Context) (*providergcs.AuthDetails, error) {
+	probeGCSAuth = func(context.Context, providergcs.Options) (*providergcs.AuthDetails, error) {
 		return &providergcs.AuthDetails{TokenExpiry: now.Add(45 * time.Minute)}, nil
 	}
-	describeGCSAuthSource = func() (string, error) {
+	describeGCSAuthSource = func(providergcs.Options) (string, error) {
 		return "ADC via local ADC file (~/.config/gcloud/application_default_credentials.json), quota-project=<none>", nil
 	}
 
-	status := probeGCS(context.Background())
+	status := probeGCS(context.Background(), "", "")
 	if !status.OK {
 		t.Fatalf("status.OK = false, want true")
 	}
@@ -261,14 +261,14 @@ func TestProbeGCSFallsBackWhenDescribeFails(t *testing.T) {
 
 	now := time.Date(2026, 3, 22, 15, 0, 0, 0, time.UTC)
 	nowFunc = func() time.Time { return now }
-	probeGCSAuth = func(context.Context) (*providergcs.AuthDetails, error) {
+	probeGCSAuth = func(context.Context, providergcs.Options) (*providergcs.AuthDetails, error) {
 		return &providergcs.AuthDetails{TokenExpiry: now.Add(2 * time.Hour)}, nil
 	}
-	describeGCSAuthSource = func() (string, error) {
+	describeGCSAuthSource = func(providergcs.Options) (string, error) {
 		return "", errors.New("unavailable")
 	}
 
-	status := probeGCS(context.Background())
+	status := probeGCS(context.Background(), "", "")
 	if status.Detail != "ADC token acquired (valid for 2h)" {
 		t.Fatalf("detail = %q, want fallback detail with token validity", status.Detail)
 	}
@@ -359,7 +359,7 @@ func TestRunUntargetedScopesToAzureWhenAZProfileProvided(t *testing.T) {
 	probeAzureAuth = func(context.Context, string) (*providerazblob.AuthDetails, error) {
 		return &providerazblob.AuthDetails{}, nil
 	}
-	probeGCSAuth = func(context.Context) (*providergcs.AuthDetails, error) {
+	probeGCSAuth = func(context.Context, providergcs.Options) (*providergcs.AuthDetails, error) {
 		t.Fatal("probeGCSAuth should not be called when az-profile scopes doctor to Azure")
 		return nil, nil
 	}

@@ -29,7 +29,8 @@ func splitCmd() *cobra.Command {
 		Short: "Split large files into shard files",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			azProfile, _ := cmd.Flags().GetString("az-profile")
-			gcpProject, _ := cmd.Flags().GetString("gcp-project")
+			gcpProfile, _ := cmd.Flags().GetString("gcp-profile")
+			gcpProject := selectedGCPProject(cmd)
 			landingDir, _ := cmd.Flags().GetString("landing")
 			handleErr := func(err error) error {
 				var unsupported *uri.ErrUnsupportedScheme
@@ -39,7 +40,7 @@ func splitCmd() *cobra.Command {
 				return withExitCode(exitOperational, "%v", err)
 			}
 			res, err := split.Split(cmd.Context(), args[0], split.Options{
-				ProviderOptions: split.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject},
+				ProviderOptions: split.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile},
 				Mode:            split.Mode(mode),
 				Rows:            rows,
 				Bytes:           mbToBytes(bytesLimit),

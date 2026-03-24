@@ -16,8 +16,10 @@ func Copy(ctx context.Context, srcURI, dstURI string, opts CopyOptions) (*CopyRe
 	if err != nil {
 		return nil, err
 	}
+	srcProviderOptions := mergeProviderOptions(opts.ProviderOptions, opts.SourceProviderOptions)
+	dstProviderOptions := mergeProviderOptions(opts.ProviderOptions, opts.DestinationProviderOptions)
 	getResult, err := Download(ctx, srcURI, DownloadOptions{
-		ProviderOptions: opts.ProviderOptions,
+		ProviderOptions: srcProviderOptions,
 		LandingDir:      landingDir,
 		BlockSize:       opts.BlockSize,
 		Concurrency:     opts.Concurrency,
@@ -30,7 +32,7 @@ func Copy(ctx context.Context, srcURI, dstURI string, opts CopyOptions) (*CopyRe
 	}
 	landingPath := getResult.Destination
 	if _, err := Upload(ctx, UploadOptions{
-		ProviderOptions: opts.ProviderOptions,
+		ProviderOptions: dstProviderOptions,
 		SourcePath:      landingPath,
 		Destination:     dstURI,
 		BlockSize:       opts.BlockSize,

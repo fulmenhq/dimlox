@@ -2,7 +2,9 @@ package main
 
 import (
 	"errors"
+	"fmt"
 
+	providergcs "github.com/fulmenhq/dimlox/internal/provider/gcs"
 	"github.com/fulmenhq/dimlox/internal/transfer"
 	"github.com/fulmenhq/dimlox/internal/uri"
 	"github.com/spf13/cobra"
@@ -20,6 +22,12 @@ func cpCmd() *cobra.Command {
 		maxSources      int
 		continueOnError bool
 		dryRun          bool
+		gcpProfileSrc   string
+		gcpProfileDst   string
+		gcpCredsFileSrc string
+		gcpCredsFileDst string
+		gcpProjectSrc   string
+		gcpProjectDst   string
 	)
 	cmd := &cobra.Command{
 		Use:   "cp [flags] <src-uri>... <dst-uri>",
@@ -43,14 +51,35 @@ func cpCmd() *cobra.Command {
 			}
 
 			azProfile, _ := cmd.Flags().GetString("az-profile")
-			gcpProject, _ := cmd.Flags().GetString("gcp-project")
+			gcpProfile, _ := cmd.Flags().GetString("gcp-profile")
+			gcpProject := selectedGCPProject(cmd)
 			landingDir, _ := cmd.Flags().GetString("landing")
+			srcProviderOptions := transfer.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile}
+			dstProviderOptions := transfer.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile}
+			if gcpProjectSrc != "" {
+				srcProviderOptions.GCPProject = gcpProjectSrc
+			}
+			if gcpProjectDst != "" {
+				dstProviderOptions.GCPProject = gcpProjectDst
+			}
+			if gcpProfileSrc != "" {
+				srcProviderOptions.GCPProfile = gcpProfileSrc
+			}
+			if gcpProfileDst != "" {
+				dstProviderOptions.GCPProfile = gcpProfileDst
+			}
+			srcProviderOptions.GCPCredsFile = gcpCredsFileSrc
+			dstProviderOptions.GCPCredsFile = gcpCredsFileDst
 			plan, err := transfer.BuildCopyPlan(cmd.Context(), args, transfer.CopyPlanOptions{
-				ProviderOptions: transfer.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject},
-				FromFile:        fromFile,
-				MaxSources:      maxSources,
+				ProviderOptions:       transfer.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile},
+				SourceProviderOptions: srcProviderOptions,
+				FromFile:              fromFile,
+				MaxSources:            maxSources,
 			})
 			if err != nil {
+				return withExitCode(exitBadURI, "%v", err)
+			}
+			if err := validateGCSLegSelections(plan, srcProviderOptions, dstProviderOptions); err != nil {
 				return withExitCode(exitBadURI, "%v", err)
 			}
 			if dryRun {
@@ -61,13 +90,15 @@ func cpCmd() *cobra.Command {
 			}
 			_, err = transfer.ExecuteCopyPlan(cmd.Context(), plan, transfer.ExecuteCopyPlanOptions{
 				CopyOptions: transfer.CopyOptions{
-					ProviderOptions: transfer.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject},
-					LandingDir:      landingDir,
-					BlockSize:       mbToBytes(blockMB),
-					Concurrency:     concurrency,
-					Compress:        compress,
-					KeepLanding:     keepLanding,
-					Verify:          verify,
+					ProviderOptions:            transfer.ProviderOptions{AZProfile: azProfile, GCPProject: gcpProject, GCPProfile: gcpProfile},
+					SourceProviderOptions:      srcProviderOptions,
+					DestinationProviderOptions: dstProviderOptions,
+					LandingDir:                 landingDir,
+					BlockSize:                  mbToBytes(blockMB),
+					Concurrency:                concurrency,
+					Compress:                   compress,
+					KeepLanding:                keepLanding,
+					Verify:                     verify,
 				},
 				ContinueOnError: continueOnError,
 				SummaryWriter:   cmd.ErrOrStderr(),
@@ -95,5 +126,46 @@ func cpCmd() *cobra.Command {
 	cmd.Flags().IntVar(&maxSources, "max-sources", transfer.DefaultMaxSources, "maximum number of sources resolved by glob expansion before preflight fails")
 	cmd.Flags().BoolVar(&continueOnError, "continue-on-error", false, "attempt all transfers and report failures at the end")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the transfer plan without executing it")
+	cmd.Flags().StringVar(&gcpProfileSrc, "gcp-profile-src", "", "gcloud named configuration for GCS source legs")
+	cmd.Flags().StringVar(&gcpProfileDst, "gcp-profile-dst", "", "gcloud named configuration for GCS destination legs")
+	cmd.Flags().StringVar(&gcpCredsFileSrc, "gcp-creds-file-src", "", "credential file for GCS source legs")
+	cmd.Flags().StringVar(&gcpCredsFileDst, "gcp-creds-file-dst", "", "credential file for GCS destination legs")
+	cmd.Flags().StringVar(&gcpProjectSrc, "gcp-project-src", "", "GCP project for GCS source legs")
+	cmd.Flags().StringVar(&gcpProjectDst, "gcp-project-dst", "", "GCP project for GCS destination legs")
 	return cmd
+}
+
+func validateGCSLegSelections(plan *transfer.CopyPlan, srcOpts, dstOpts transfer.ProviderOptions) error {
+	if plan == nil {
+		return nil
+	}
+	hasGCSSource := false
+	hasGCSDestination := false
+	for _, item := range plan.Items {
+		srcParsed, err := uri.Parse(item.Source)
+		if err != nil {
+			return err
+		}
+		if srcParsed.Provider == uri.ProviderGCS {
+			hasGCSSource = true
+		}
+		dstParsed, err := uri.Parse(item.Destination)
+		if err != nil {
+			return err
+		}
+		if dstParsed.Provider == uri.ProviderGCS {
+			hasGCSDestination = true
+		}
+	}
+	if hasGCSSource {
+		if _, err := providergcs.ResolveOptions(providergcs.Options{Project: srcOpts.GCPProject, Profile: srcOpts.GCPProfile, CredsFile: srcOpts.GCPCredsFile}); err != nil {
+			return fmt.Errorf("source GCS auth preflight: %w", err)
+		}
+	}
+	if hasGCSDestination {
+		if _, err := providergcs.ResolveOptions(providergcs.Options{Project: dstOpts.GCPProject, Profile: dstOpts.GCPProfile, CredsFile: dstOpts.GCPCredsFile}); err != nil {
+			return fmt.Errorf("destination GCS auth preflight: %w", err)
+		}
+	}
+	return nil
 }

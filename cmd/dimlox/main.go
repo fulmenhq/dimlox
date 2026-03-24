@@ -52,6 +52,7 @@ func main() {
 func rootCmd() *cobra.Command {
 	var (
 		azProfile  string
+		gcpProfile string
 		gcpProject string
 		landingDir string
 		logLevel   string
@@ -89,6 +90,8 @@ Google Cloud Storage, and local filesystems without loading them into memory.`,
 
 	root.PersistentFlags().StringVar(&azProfile, "az-profile", "",
 		"Azure CLI profile name (sets AZURE_CONFIG_DIR via AZURE_PROFILES_DIR or ~/.azure-profiles/<name>)")
+	root.PersistentFlags().StringVar(&gcpProfile, "gcp-profile", "",
+		"gcloud named configuration for GCS endpoints (respects CLOUDSDK_CONFIG when set)")
 	root.PersistentFlags().StringVar(&gcpProject, "gcp-project", defaultGCPProject(),
 		"GCP project ID for requester-pays buckets (also: GCLOUD_PROJECT env)")
 	root.PersistentFlags().StringVar(&landingDir, "landing", os.Getenv("DIMLOX_LANDING_DIR"),
@@ -138,4 +141,16 @@ func mbToBytes(mb int64) int64 {
 		return 0
 	}
 	return mb * 1024 * 1024
+}
+
+func selectedGCPProject(cmd *cobra.Command) string {
+	if cmd == nil {
+		return ""
+	}
+	flag := cmd.Flags().Lookup("gcp-project")
+	if flag == nil || !flag.Changed {
+		return ""
+	}
+	value, _ := cmd.Flags().GetString("gcp-project")
+	return value
 }

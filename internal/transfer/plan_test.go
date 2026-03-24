@@ -104,6 +104,35 @@ func TestBuildCopyPlanGlobCollisionFails(t *testing.T) {
 	}
 }
 
+func TestBuildCopyPlanGlobUsesSourceProviderOptions(t *testing.T) {
+	origResolver := providerResolver
+	t.Cleanup(func() { providerResolver = origResolver })
+
+	providerResolver = func(_ context.Context, _ string, opts providers.Options) (provider.StorageProvider, *uri.ParsedURI, error) {
+		if opts.GCPProfile != "source-profile" {
+			return nil, nil, fmt.Errorf("resolver GCPProfile = %q, want source-profile", opts.GCPProfile)
+		}
+		if opts.GCPCredsFile != "/tmp/source.json" {
+			return nil, nil, fmt.Errorf("resolver GCPCredsFile = %q, want /tmp/source.json", opts.GCPCredsFile)
+		}
+		return fakeListProvider{items: []*provider.ObjectMeta{
+			{URI: "gcs://bucket/data/orders_2024.psv", Name: "data/orders_2024.psv"},
+		}}, &uri.ParsedURI{Provider: uri.ProviderGCS, GCSBucket: "bucket", GCSObject: "data/orders_*.psv"}, nil
+	}
+
+	plan, err := BuildCopyPlan(context.Background(), []string{"gs://bucket/data/orders_*.psv", "gs://dest-bucket/out/"}, CopyPlanOptions{
+		ProviderOptions:       ProviderOptions{GCPProfile: "global-profile"},
+		SourceProviderOptions: ProviderOptions{GCPProfile: "source-profile", GCPCredsFile: "/tmp/source.json"},
+		MaxSources:            10,
+	})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+	if len(plan.Items) != 1 {
+		t.Fatalf("len(plan.Items) = %d, want 1", len(plan.Items))
+	}
+}
+
 func TestExecuteCopyPlanContinueOnError(t *testing.T) {
 	tmp := t.TempDir()
 	src1 := filepath.Join(tmp, "ok.txt")

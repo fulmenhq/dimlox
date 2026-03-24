@@ -22,12 +22,14 @@ var (
 	probeAzureAuth        = providerazblob.ProbeAuth
 	probeGCSAuth          = providergcs.ProbeAuth
 	describeGCSAuthSource = providergcs.DescribeAuthSource
+	listGCSProfiles       = providergcs.ListProfiles
 	resolveAzureProfile   = providerazblob.ResolveProfile
 	nowFunc               = time.Now
 )
 
 type Options struct {
 	AZProfile  string
+	GCPProfile string
 	GCPProject string
 	Version    string
 }
@@ -60,7 +62,7 @@ func Run(ctx context.Context, target string, opts Options) (*Result, error) {
 			statuses = append(statuses, probeAzure(ctx, opts.AZProfile))
 		}
 		if shouldProbeGCS(opts) {
-			statuses = append(statuses, probeGCS(ctx))
+			statuses = append(statuses, probeGCS(ctx, opts.GCPProfile, opts.GCPProject))
 		}
 		result.Statuses = statuses
 		for _, status := range statuses {
@@ -87,7 +89,7 @@ func Run(ctx context.Context, target string, opts Options) (*Result, error) {
 		}
 	}
 
-	p, _, err := providers.ForURI(ctx, target, providers.Options{AZProfile: opts.AZProfile, GCPProject: opts.GCPProject})
+	p, _, err := providers.ForURI(ctx, target, providers.Options{AZProfile: opts.AZProfile, GCPProject: opts.GCPProject, GCPProfile: opts.GCPProfile})
 	if err != nil {
 		return result, err
 	}
@@ -164,11 +166,11 @@ func probeAzure(ctx context.Context, profile string) Status {
 }
 
 func shouldProbeAzure(opts Options) bool {
-	return opts.AZProfile != "" || opts.GCPProject == ""
+	return opts.AZProfile != "" || (opts.GCPProject == "" && opts.GCPProfile == "")
 }
 
 func shouldProbeGCS(opts Options) bool {
-	return opts.GCPProject != "" || opts.AZProfile == ""
+	return opts.GCPProfile != "" || opts.GCPProject != "" || opts.AZProfile == ""
 }
 
 func azureProfileSetupStatus(profile string) (*Status, *providerazblob.ProfileResolution, error) {
@@ -318,13 +320,13 @@ func effectiveHomeDir() (string, error) {
 	return os.UserHomeDir()
 }
 
-func probeGCS(ctx context.Context) Status {
-	details, err := probeGCSAuth(ctx)
+func probeGCS(ctx context.Context, profile, project string) Status {
+	details, err := probeGCSAuth(ctx, providergcs.Options{Profile: profile, Project: project})
 	if err != nil {
 		kind := classify(err)
 		return Status{Provider: "gcs", OK: false, Kind: kind, Detail: err.Error()}
 	}
-	detail, err := describeGCSAuthSource()
+	detail, err := describeGCSAuthSource(providergcs.Options{Profile: profile, Project: project})
 	if err != nil {
 		detail = "ADC token acquired"
 	}

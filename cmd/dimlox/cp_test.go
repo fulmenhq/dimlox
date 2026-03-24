@@ -52,3 +52,18 @@ func TestCPRejectsParallelAboveOne(t *testing.T) {
 		t.Fatalf("exitCodeFor(cp --parallel 2) = %d, want %d (err=%v)", got, exitBadURI, err)
 	}
 }
+
+func TestCPRejectsMissingPerLegGCSCredentialFileDuringPreflight(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"cp", "--dry-run", "--gcp-creds-file-src", "/tmp/missing-sa.json", "gs://bucket/orders.psv", "/tmp/out.psv"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want error")
+	}
+	if got := exitCodeFor(err); got != exitBadURI {
+		t.Fatalf("exitCodeFor(cp missing gcs creds) = %d, want %d (err=%v)", got, exitBadURI, err)
+	}
+	if !strings.Contains(err.Error(), "source GCS auth preflight") {
+		t.Fatalf("err = %v, want source preflight context", err)
+	}
+}

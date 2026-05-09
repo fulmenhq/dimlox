@@ -48,6 +48,7 @@ catalog, selection guide, and escalation paths.
 | `entarch`      | Contract durability, rewrite-safe architecture     | `config/agentic/roles/entarch.yaml`      |
 | `infoarch`     | Docs, plan updates, decision records               | `config/agentic/roles/infoarch.yaml`     |
 | `prodmktg`     | Product positioning, devrel, adoption support      | `config/agentic/roles/prodmktg.yaml`     |
+| `dataeng`      | Cloud data movement orchestration, transfer manifests, integrity validation | `config/agentic/roles/dataeng.yaml`      |
 
 Security review is still a required function for auth/credential changes, but a
 local `secrev` role file has not been added to this repo yet. Until it is,
